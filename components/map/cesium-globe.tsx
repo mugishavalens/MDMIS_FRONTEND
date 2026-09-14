@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { DetectionSite } from '@/lib/mdmis-data'
-import { SHIPMENTS } from '@/lib/mdmis-data'
 import { fetchSites, type Site } from '@/lib/api/sites'
+import { fetchShipments, type TransportShipment } from '@/lib/api/transport'
 import { MINERAL_HEX } from '@/lib/site-terrain'
 import { 
   RotateCcw, ZoomIn, ZoomOut, Compass, Eye, EyeOff, 
@@ -116,6 +116,8 @@ export default function CesiumGlobe({
   const [isLoaded, setIsLoaded]                 = useState(false)
   const [sites, setSites]                       = useState<Site[]>([])
   const [sitesLoaded, setSitesLoaded]           = useState(false)
+  const [shipments, setShipments]               = useState<TransportShipment[]>([])
+  const [shipmentsLoaded, setShipmentsLoaded]   = useState(false)
 
   // ── Fetch real sites before the globe plots anything ──────────────────────
   useEffect(() => {
@@ -127,9 +129,19 @@ export default function CesiumGlobe({
     return () => { cancelled = true }
   }, [])
 
-  // ── Initialise once sites are loaded — wait for global Cesium ─────────────
+  // ── Fetch real shipments for the transport corridor overlay ───────────────
   useEffect(() => {
-    if (!sitesLoaded || !containerRef.current || viewerRef.current) return
+    let cancelled = false
+    fetchShipments()
+      .then((data) => { if (!cancelled) setShipments(data) })
+      .catch((err) => console.error('[MDMIS] Failed to load shipments:', err))
+      .finally(() => { if (!cancelled) setShipmentsLoaded(true) })
+    return () => { cancelled = true }
+  }, [])
+
+  // ── Initialise once sites & shipments are loaded — wait for global Cesium ──
+  useEffect(() => {
+    if (!sitesLoaded || !shipmentsLoaded || !containerRef.current || viewerRef.current) return
 
     let destroyed = false
     let resizeObserver: ResizeObserver | null = null
@@ -313,7 +325,7 @@ export default function CesiumGlobe({
           })
 
           // ── Plot Active Transport Corridors ───────────────────────────────
-          SHIPMENTS.forEach((shp) => {
+          shipments.forEach((shp) => {
             const isDelayed = shp.status === 'delayed'
             const arcColor = isDelayed ? '#ef4444' : '#4bc5d6'
 
@@ -406,7 +418,7 @@ export default function CesiumGlobe({
       viewerRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sitesLoaded])
+  }, [sitesLoaded, shipmentsLoaded])
 
   // ── Fly to site when selectedId changes ────────────────────────────────────
   useEffect(() => {
