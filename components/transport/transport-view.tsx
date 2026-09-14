@@ -1,8 +1,18 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import { Truck, MapPin, User, Package, Clock, SatelliteDish, AlertTriangle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { StatusPill } from '@/components/shell/status-pill'
-import { SHIPMENTS, MINERAL_META, fmtNumber, type Shipment } from '@/lib/mdmis-data'
+import { MINERAL_META, fmtNumber, type Shipment } from '@/lib/mdmis-data'
+import { fetchShipments, type TransportShipment } from '@/lib/api/transport'
+
+const FALLBACK_MINERAL_COLOR = '#9b6dff'
+
+function mineralColor(mineral: string): string {
+  return MINERAL_META[mineral as keyof typeof MINERAL_META]?.color ?? FALLBACK_MINERAL_COLOR
+}
 
 function statusTone(s: Shipment['status']) {
   switch (s) {
@@ -18,73 +28,91 @@ function statusTone(s: Shipment['status']) {
 }
 
 export function TransportView() {
-  const inTransit = SHIPMENTS.filter((s) => s.status === 'in-transit').length
-  const delayed = SHIPMENTS.filter((s) => s.status === 'delayed').length
-  const totalKg = SHIPMENTS.reduce((a, s) => a + s.weightKg, 0)
+  const [shipments, setShipments] = useState<TransportShipment[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchShipments()
+      .then((data) => { if (!cancelled) setShipments(data) })
+      .catch((err) => console.error('[MDMIS] Failed to load shipments:', err))
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  const inTransit = shipments.filter((s) => s.status === 'in-transit').length
+  const delayed = shipments.filter((s) => s.status === 'delayed').length
+  const totalKg = shipments.reduce((a, s) => a + s.weightKg, 0)
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Summary icon={Truck} label="Active convoys" value={String(SHIPMENTS.length)} />
+        <Summary icon={Truck} label="Active convoys" value={String(shipments.length)} />
         <Summary icon={SatelliteDish} label="In transit" value={String(inTransit)} />
         <Summary icon={AlertTriangle} label="Delayed / GPS loss" value={String(delayed)} tone="danger" />
         <Summary icon={Package} label="Total in motion" value={`${fmtNumber(totalKg)} kg`} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {SHIPMENTS.map((s) => (
-          <Card key={s.id} className="border-border bg-card">
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span
-                    className="flex size-10 items-center justify-center rounded-md"
-                    style={{ background: `color-mix(in oklch, ${MINERAL_META[s.mineral].color} 15%, transparent)` }}
-                  >
-                    <Truck className="size-5" style={{ color: MINERAL_META[s.mineral].color }} />
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">
-                      {s.id} <span className="font-normal text-muted-foreground">· {s.vehicle}</span>
-                    </p>
-                    <p className="font-mono text-xs text-muted-foreground">
-                      {s.mineral} · {fmtNumber(s.weightKg)} kg · lot {s.lotId}
-                    </p>
+      {loading ? (
+        <p className="py-10 text-center text-xs text-muted-foreground">Loading shipments…</p>
+      ) : shipments.length === 0 ? (
+        <p className="py-10 text-center text-xs text-muted-foreground">No shipments recorded yet.</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {shipments.map((s) => (
+            <Card key={s.id} className="border-border bg-card">
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="flex size-10 items-center justify-center rounded-md"
+                      style={{ background: `color-mix(in oklch, ${mineralColor(s.mineral)} 15%, transparent)` }}
+                    >
+                      <Truck className="size-5" style={{ color: mineralColor(s.mineral) }} />
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        {s.id} <span className="font-normal text-muted-foreground">· {s.vehicle}</span>
+                      </p>
+                      <p className="font-mono text-xs text-muted-foreground">
+                        {s.mineral} · {fmtNumber(s.weightKg)} kg{s.lotId ? ` · lot ${s.lotId}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <StatusPill tone={statusTone(s.status)}>{s.status.replace('-', ' ')}</StatusPill>
+                </div>
+
+                {/* route */}
+                <div className="mt-4 flex items-center gap-2 text-xs">
+                  <MapPin className="size-3.5 text-[var(--success)]" />
+                  <span className="truncate text-foreground">{s.origin.name}</span>
+                  <span className="flex-1 border-t border-dashed border-border" />
+                  <MapPin className="size-3.5 text-primary" />
+                  <span className="truncate text-foreground">{s.destination.name}</span>
+                </div>
+
+                <div className="mt-2">
+                  <Progress value={s.progress} className="h-1.5" />
+                  <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <User className="size-3" /> {s.driver}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="size-3" /> ETA {s.etaHours}h
+                    </span>
                   </div>
                 </div>
-                <StatusPill tone={statusTone(s.status)}>{s.status.replace('-', ' ')}</StatusPill>
-              </div>
 
-              {/* route */}
-              <div className="mt-4 flex items-center gap-2 text-xs">
-                <MapPin className="size-3.5 text-[var(--success)]" />
-                <span className="truncate text-foreground">{s.origin.name}</span>
-                <span className="flex-1 border-t border-dashed border-border" />
-                <MapPin className="size-3.5 text-primary" />
-                <span className="truncate text-foreground">{s.destination.name}</span>
-              </div>
-
-              <div className="mt-2">
-                <Progress value={s.progress} className="h-1.5" />
-                <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <User className="size-3" /> {s.driver}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Clock className="size-3" /> ETA {s.etaHours}h
-                  </span>
-                </div>
-              </div>
-
-              {!s.gpsIntegrity && (
-                <div className="mt-3 flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive">
-                  <AlertTriangle className="size-3.5" /> GPS integrity lost — signal gap flagged for review
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                {!s.gpsIntegrity && (
+                  <div className="mt-3 flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive">
+                    <AlertTriangle className="size-3.5" /> GPS integrity lost — signal gap flagged for review
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

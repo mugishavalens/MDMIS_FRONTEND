@@ -1,9 +1,13 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import { ScanLine, AlertTriangle, Truck, ShieldCheck, Link2, type LucideIcon } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { ACTIVITY, timeAgo, type ActivityKind } from '@/lib/mdmis-data'
+import { timeAgo } from '@/lib/mdmis-data'
+import { fetchDashboardSummary, type ActivityItem } from '@/lib/api/dashboard'
 import { cn } from '@/lib/utils'
 
-const KIND: Record<ActivityKind, { icon: LucideIcon; tone: string }> = {
+const KIND: Record<ActivityItem['kind'], { icon: LucideIcon; tone: string }> = {
   scan: { icon: ScanLine, tone: 'text-accent bg-accent/12' },
   alert: { icon: AlertTriangle, tone: 'text-destructive bg-destructive/12' },
   shipment: { icon: Truck, tone: 'text-primary bg-primary/12' },
@@ -12,6 +16,18 @@ const KIND: Record<ActivityKind, { icon: LucideIcon; tone: string }> = {
 }
 
 export function ActivityFeed() {
+  const [activity, setActivity] = useState<ActivityItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchDashboardSummary()
+      .then((data) => { if (!cancelled) setActivity(data.activity) })
+      .catch((err) => console.error('[MDMIS] Failed to load activity feed:', err))
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
   return (
     <Card className="border-border bg-card">
       <CardHeader className="flex flex-row items-center justify-between">
@@ -19,29 +35,35 @@ export function ActivityFeed() {
         <span className="text-xs text-muted-foreground">Live feed</span>
       </CardHeader>
       <CardContent>
-        <ol className="relative space-y-1">
-          {ACTIVITY.map((a, i) => {
-            const meta = KIND[a.kind]
-            const Icon = meta.icon
-            return (
-              <li key={a.id} className="flex gap-3">
-                <div className="flex flex-col items-center">
-                  <span className={cn('flex size-8 items-center justify-center rounded-md', meta.tone)}>
-                    <Icon className="size-4" />
-                  </span>
-                  {i < ACTIVITY.length - 1 && <span className="my-1 w-px flex-1 bg-border" aria-hidden />}
-                </div>
-                <div className="min-w-0 pb-4">
-                  <p className="text-sm font-medium text-foreground">{a.title}</p>
-                  <p className="text-xs text-muted-foreground">{a.detail}</p>
-                  <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                    {timeAgo(a.timestamp)}
-                  </p>
-                </div>
-              </li>
-            )
-          })}
-        </ol>
+        {loading ? (
+          <p className="py-6 text-center text-xs text-muted-foreground">Loading…</p>
+        ) : activity.length === 0 ? (
+          <p className="py-6 text-center text-xs text-muted-foreground">No recent activity.</p>
+        ) : (
+          <ol className="relative space-y-1">
+            {activity.map((a, i) => {
+              const meta = KIND[a.kind]
+              const Icon = meta.icon
+              return (
+                <li key={a.id} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <span className={cn('flex size-8 items-center justify-center rounded-md', meta.tone)}>
+                      <Icon className="size-4" />
+                    </span>
+                    {i < activity.length - 1 && <span className="my-1 w-px flex-1 bg-border" aria-hidden />}
+                  </div>
+                  <div className="min-w-0 pb-4">
+                    <p className="text-sm font-medium text-foreground">{a.title}</p>
+                    <p className="text-xs text-muted-foreground">{a.detail}</p>
+                    <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {timeAgo(a.timestamp)}
+                    </p>
+                  </div>
+                </li>
+              )
+            })}
+          </ol>
+        )}
       </CardContent>
     </Card>
   )

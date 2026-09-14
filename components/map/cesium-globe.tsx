@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { DetectionSite } from '@/lib/mdmis-data'
-import { SITES, SHIPMENTS } from '@/lib/mdmis-data'
+import { fetchSites, type Site } from '@/lib/api/sites'
+import { fetchShipments, type TransportShipment } from '@/lib/api/transport'
 import { MINERAL_HEX } from '@/lib/site-terrain'
 import { 
   RotateCcw, ZoomIn, ZoomOut, Compass, Eye, EyeOff, 
@@ -113,10 +114,34 @@ export default function CesiumGlobe({
   const [activeBaseLayer, setActiveBaseLayer]   = useState<BaseLayerType>('satellite')
   const [layersMenuOpen, setLayersMenuOpen]     = useState(false)
   const [isLoaded, setIsLoaded]                 = useState(false)
+  const [sites, setSites]                       = useState<Site[]>([])
+  const [sitesLoaded, setSitesLoaded]           = useState(false)
+  const [shipments, setShipments]               = useState<TransportShipment[]>([])
+  const [shipmentsLoaded, setShipmentsLoaded]   = useState(false)
 
-  // ── Initialise once — wait for global Cesium ──────────────────────────────
+  // ── Fetch real sites before the globe plots anything ──────────────────────
   useEffect(() => {
-    if (!containerRef.current || viewerRef.current) return
+    let cancelled = false
+    fetchSites()
+      .then((data) => { if (!cancelled) setSites(data) })
+      .catch((err) => console.error('[MDMIS] Failed to load sites:', err))
+      .finally(() => { if (!cancelled) setSitesLoaded(true) })
+    return () => { cancelled = true }
+  }, [])
+
+  // ── Fetch real shipments for the transport corridor overlay ───────────────
+  useEffect(() => {
+    let cancelled = false
+    fetchShipments()
+      .then((data) => { if (!cancelled) setShipments(data) })
+      .catch((err) => console.error('[MDMIS] Failed to load shipments:', err))
+      .finally(() => { if (!cancelled) setShipmentsLoaded(true) })
+    return () => { cancelled = true }
+  }, [])
+
+  // ── Initialise once sites & shipments are loaded — wait for global Cesium ──
+  useEffect(() => {
+    if (!sitesLoaded || !shipmentsLoaded || !containerRef.current || viewerRef.current) return
 
     let destroyed = false
     let resizeObserver: ResizeObserver | null = null
@@ -219,7 +244,7 @@ export default function CesiumGlobe({
           })
 
           // ── Plot all mine sites & Subsurface Depth Pillars ─────────────────
-          SITES.forEach((site) => {
+          sites.forEach((site) => {
             const canvas = document.createElement('canvas')
             canvas.width  = 44
             canvas.height = 44
@@ -300,7 +325,7 @@ export default function CesiumGlobe({
           })
 
           // ── Plot Active Transport Corridors ───────────────────────────────
-          SHIPMENTS.forEach((shp) => {
+          shipments.forEach((shp) => {
             const isDelayed = shp.status === 'delayed'
             const arcColor = isDelayed ? '#ef4444' : '#4bc5d6'
 
@@ -329,7 +354,7 @@ export default function CesiumGlobe({
           handler.setInputAction((click: any) => {
             const picked = scene.pick(click.position)
             if (!picked?.id?.id) return
-            const site = SITES.find((s) => s.id === picked.id.id)
+            const site = sites.find((s) => s.id === picked.id.id)
             if (!site) return
             onSelect(site)
             flyToSite(viewer, Cesium, site)
@@ -339,15 +364,15 @@ export default function CesiumGlobe({
           handler.setInputAction((click: any) => {
             const picked = scene.pick(click.position)
             if (!picked?.id?.id) return
-            const site = SITES.find((s) => s.id === picked.id.id)
+            const site = sites.find((s) => s.id === picked.id.id)
             if (site) onInspect(site)
           }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK)
 
           // ── Visibility Tracking on Camera Move ────────────────────────────
           scene.camera.changed.addEventListener(() => {
-            reportVisible(viewer, Cesium, onVisibleSitesChange)
+            reportVisible(viewer, Cesium, sites, onVisibleSitesChange)
           })
-          setTimeout(() => reportVisible(viewer, Cesium, onVisibleSitesChange), 800)
+          setTimeout(() => reportVisible(viewer, Cesium, sites, onVisibleSitesChange), 800)
 
           // ── Cursor Pointer on Hover ───────────────────────────────────────
           scene.canvas.addEventListener('mousemove', (e: MouseEvent) => {
@@ -393,20 +418,20 @@ export default function CesiumGlobe({
       viewerRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [sitesLoaded, shipmentsLoaded])
 
   // ── Fly to site when selectedId changes ────────────────────────────────────
   useEffect(() => {
     const viewer = viewerRef.current
     const Cesium = (globalThis as any).Cesium
     if (!viewer || !Cesium || !selectedId) return
-    const site = SITES.find((s) => s.id === selectedId)
+    const site = sites.find((s) => s.id === selectedId)
     if (!site) return
     removeInfoOverlay()
     flyToSite(viewer, Cesium, site)
     showInfoOverlay(site)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId])
+  }, [selectedId, sites])
 
   // ── Highlight selected entity ──────────────────────────────────────────────
   useEffect(() => {
@@ -769,21 +794,26 @@ function flyToSite(viewer: any, Cesium: any, site: DetectionSite) {
   })
 }
 
-function reportVisible(viewer: any, Cesium: any, onVisibleSitesChange: (ids: string[]) => void) {
+function reportVisible(
+  viewer: any,
+  Cesium: any,
+  sites: DetectionSite[],
+  onVisibleSitesChange: (ids: string[]) => void,
+) {
   if (!viewer || viewer.isDestroyed()) return
   const camera = viewer.camera
   const rect   = camera.computeViewRectangle(viewer.scene.globe.ellipsoid)
-  if (!rect) { onVisibleSitesChange(SITES.map((s) => s.id)); return }
+  if (!rect) { onVisibleSitesChange(sites.map((s) => s.id)); return }
 
   const west  = Cesium.Math.toDegrees(rect.west)
   const east  = Cesium.Math.toDegrees(rect.east)
   const south = Cesium.Math.toDegrees(rect.south)
   const north = Cesium.Math.toDegrees(rect.north)
 
-  const visible = SITES
+  const visible = sites
     .filter((s) => s.lat >= south && s.lat <= north && s.lng >= west && s.lng <= east)
     .map((s) => s.id)
-  onVisibleSitesChange(visible.length > 0 ? visible : SITES.map((s) => s.id))
+  onVisibleSitesChange(visible.length > 0 ? visible : sites.map((s) => s.id))
 }
 
 let _currentOverlay: HTMLElement | null = null

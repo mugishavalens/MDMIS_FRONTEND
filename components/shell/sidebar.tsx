@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, Globe2, ScanLine, Link2, Truck,
-  ShieldCheck, Mountain, Radio, LogOut, Sun, Moon, Settings, Satellite,
+  ShieldCheck, Mountain, Radio, LogOut, Sun, Moon, Settings, Satellite, HardHat,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/components/shell/theme-provider'
@@ -18,6 +18,7 @@ const ALL_NAV = [
   { href: '/traceability', label: 'Chain of Custody', icon: Link2 },
   { href: '/transport', label: 'Fleet Management', icon: Truck },
   { href: '/compliance', label: 'Regulatory Compliance', icon: ShieldCheck },
+  { href: '/safety', label: 'Safety Incidents', icon: HardHat },
   { href: '/admin', label: 'System Admin', icon: Settings },
 ]
 

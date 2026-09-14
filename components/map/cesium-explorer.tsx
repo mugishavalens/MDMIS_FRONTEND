@@ -9,9 +9,10 @@ import {
   ArrowLeft, EyeOff, RotateCcw,
 } from 'lucide-react'
 import {
-  SITES, RISK_META, MINERAL_META, fmtNumber, timeAgo,
+  RISK_META, MINERAL_META, fmtNumber, timeAgo,
   type DetectionSite,
 } from '@/lib/mdmis-data'
+import { fetchSites, type Site } from '@/lib/api/sites'
 import { StatusPill } from '@/components/shell/status-pill'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
@@ -63,8 +64,10 @@ function Metric({ icon: Icon, label, value, sub }: {
 
 export function CesiumExplorer() {
   const router = useRouter()
+  const [sites, setSites] = useState<Site[]>([])
+  const [sitesLoading, setSitesLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [visibleIds, setVisibleIds] = useState(() => SITES.map((s) => s.id))
+  const [visibleIds, setVisibleIds] = useState<string[]>([])
   const [globeKey, setGlobeKey] = useState(0)
   const [query, setQuery] = useState('')
 
@@ -74,15 +77,31 @@ export function CesiumExplorer() {
   const [resetSignal, setResetSignal] = useState(0)
   const [mapKey, setMapKey] = useState(0)
 
-  const selected = SITES.find((s) => s.id === selectedId) ?? null
+  const selected = sites.find((s) => s.id === selectedId) ?? null
 
-  // Handle URL parameters for deep linking
+  // Fetch real sites once
   useEffect(() => {
+    let cancelled = false
+    fetchSites()
+      .then((data) => { if (!cancelled) setSites(data) })
+      .catch((err) => console.error('[MDMIS] Failed to load sites:', err))
+      .finally(() => { if (!cancelled) setSitesLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  // Seed "in view" with every site until the globe reports real viewport bounds
+  useEffect(() => {
+    setVisibleIds(sites.map((s) => s.id))
+  }, [sites])
+
+  // Handle URL parameters for deep linking — wait for sites to load first
+  useEffect(() => {
+    if (sites.length === 0) return
     const urlParams = new URLSearchParams(window.location.search)
     const siteParam = urlParams.get('site')
     const viewParam = urlParams.get('view')
-    
-    if (siteParam && SITES.find(s => s.id === siteParam)) {
+
+    if (siteParam && sites.find(s => s.id === siteParam)) {
       setSelectedId(siteParam)
       if (viewParam === 'terrain') {
         setViewMode('terrain')
@@ -91,7 +110,7 @@ export function CesiumExplorer() {
       const newUrl = window.location.pathname
       window.history.replaceState({}, '', newUrl)
     }
-  }, [])
+  }, [sites])
 
   // Listen for the inspect event dispatched by the Cesium overlay button
   useEffect(() => {
@@ -104,7 +123,7 @@ export function CesiumExplorer() {
     return () => window.removeEventListener('cesium:inspect', handler)
   }, [])
 
-  const filteredSites = SITES.filter((s) => {
+  const filteredSites = sites.filter((s) => {
     const inView = visibleIds.includes(s.id)
     const match =
       query.length === 0 ||
@@ -119,13 +138,13 @@ export function CesiumExplorer() {
     filteredSites.length > 0
       ? filteredSites
       : query.length > 0
-      ? SITES.filter((s) =>
+      ? sites.filter((s) =>
           s.name.toLowerCase().includes(query.toLowerCase()) ||
           s.district.toLowerCase().includes(query.toLowerCase()) ||
           s.primaryMineral.toLowerCase().includes(query.toLowerCase()) ||
           s.id.toLowerCase().includes(query.toLowerCase()),
         )
-      : SITES
+      : sites
 
   const handleSelect  = useCallback((site: DetectionSite) => {
     setSelectedId(site.id)
@@ -273,10 +292,10 @@ export function CesiumExplorer() {
         <div className="space-y-2.5 border-b border-border px-3 py-3">
           <div className="flex items-center justify-between">
             <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-              {query ? 'Search results' : visibleIds.length < SITES.length ? `In view (${visibleIds.length})` : 'All sites'}
+              {query ? 'Search results' : visibleIds.length < sites.length ? `In view (${visibleIds.length})` : 'All sites'}
             </p>
             <span className="rounded-full bg-secondary/60 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-              {listSites.length}/{SITES.length}
+              {listSites.length}/{sites.length}
             </span>
           </div>
           <div className="relative">
@@ -345,7 +364,7 @@ export function CesiumExplorer() {
 
             <div className="grid grid-cols-2 gap-2.5">
               <Metric icon={Layers} label="Scan method"
-                value={selected.lastScan.includes('T08') || selected.lastScan.includes('T09') ? 'Drone' : 'GPR'}
+                value={selected.lastScanMethod || 'Unknown'}
                 sub={timeAgo(selected.lastScan)} />
               <Metric icon={ShieldAlert} label="Safety score"
                 value={`${selected.safetyScore}/100`} sub={selected.safetyScore > 70 ? 'Stable' : 'Monitor'} />
@@ -389,7 +408,12 @@ export function CesiumExplorer() {
 
         {/* Site list */}
         <div className="flex-1 overflow-y-auto p-2 scrollbar-thin">
-          {listSites.length === 0 ? (
+          {sitesLoading ? (
+            <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
+              <Globe className="size-8 animate-pulse opacity-30" />
+              <p className="text-sm">Loading sites…</p>
+            </div>
+          ) : listSites.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
               <Globe className="size-8 opacity-30" />
               <p className="text-sm">No sites match your search.</p>

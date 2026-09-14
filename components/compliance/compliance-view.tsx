@@ -1,3 +1,6 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import { FileCheck2, FileClock, FileWarning, FileText, Download, ShieldCheck } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import {
@@ -10,7 +13,8 @@ import {
 } from '@/components/ui/table'
 import { Progress } from '@/components/ui/progress'
 import { StatusPill } from '@/components/shell/status-pill'
-import { REPORTS, KPIS, type ComplianceReport } from '@/lib/mdmis-data'
+import { fetchComplianceReports, FRAMEWORK_LABEL, type ComplianceReport } from '@/lib/api/compliance'
+import { fetchDashboardSummary } from '@/lib/api/dashboard'
 
 function statusMeta(s: ComplianceReport['status']) {
   switch (s) {
@@ -26,8 +30,25 @@ function statusMeta(s: ComplianceReport['status']) {
 }
 
 export function ComplianceView() {
-  const avgCoverage = Math.round(REPORTS.reduce((a, r) => a + r.coveragePct, 0) / REPORTS.length)
-  const flagged = REPORTS.reduce((a, r) => a + r.flaggedLots, 0)
+  const [reports, setReports] = useState<ComplianceReport[]>([])
+  const [compliantLotsPct, setCompliantLotsPct] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([fetchComplianceReports(), fetchDashboardSummary()])
+      .then(([r, summary]) => {
+        if (cancelled) return
+        setReports(r)
+        setCompliantLotsPct(summary.compliantLotsPct)
+      })
+      .catch((err) => console.error('[MDMIS] Failed to load compliance data:', err))
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  const avgCoverage = reports.length > 0 ? Math.round(reports.reduce((a, r) => a + r.coveragePct, 0) / reports.length) : 0
+  const flagged = reports.reduce((a, r) => a + r.flaggedLots, 0)
 
   return (
     <div className="space-y-4">
@@ -38,7 +59,7 @@ export function ComplianceView() {
               <ShieldCheck className="size-5" />
             </span>
             <div>
-              <p className="text-2xl font-semibold text-foreground">{KPIS.compliantLotsPct}%</p>
+              <p className="text-2xl font-semibold text-foreground">{compliantLotsPct ?? '—'}%</p>
               <p className="text-xs text-muted-foreground">Lots fully compliant</p>
             </div>
           </CardContent>
@@ -73,58 +94,66 @@ export function ComplianceView() {
           <CardDescription>OECD, EU Conflict Minerals, ITSCI and Rwanda Mines Board submissions</CardDescription>
         </CardHeader>
         <CardContent className="px-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-border hover:bg-transparent">
-                <TableHead>Report</TableHead>
-                <TableHead className="hidden md:table-cell">Framework</TableHead>
-                <TableHead className="hidden sm:table-cell">Period</TableHead>
-                <TableHead>Coverage</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Export</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {REPORTS.map((r) => {
-                const st = statusMeta(r.status)
-                const Icon = st.icon
-                return (
-                  <TableRow key={r.id} className="border-border">
-                    <TableCell>
-                      <div className="flex items-center gap-2.5">
-                        <Icon className="size-4 shrink-0 text-muted-foreground" />
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-foreground">{r.title}</p>
-                          <p className="font-mono text-[11px] text-muted-foreground">
-                            {r.id} · to {r.submittedTo}
-                          </p>
+          {loading ? (
+            <p className="py-10 text-center text-xs text-muted-foreground">Loading reports…</p>
+          ) : reports.length === 0 ? (
+            <p className="py-10 text-center text-xs text-muted-foreground">No compliance reports recorded yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="border-border hover:bg-transparent">
+                  <TableHead>Report</TableHead>
+                  <TableHead className="hidden md:table-cell">Framework</TableHead>
+                  <TableHead className="hidden sm:table-cell">Period</TableHead>
+                  <TableHead>Coverage</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Export</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {reports.map((r) => {
+                  const st = statusMeta(r.status)
+                  const Icon = st.icon
+                  return (
+                    <TableRow key={r.id} className="border-border">
+                      <TableCell>
+                        <div className="flex items-center gap-2.5">
+                          <Icon className="size-4 shrink-0 text-muted-foreground" />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-foreground">{r.title}</p>
+                            <p className="font-mono text-[11px] text-muted-foreground">
+                              to {r.submittedTo || 'unassigned'}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden text-xs text-muted-foreground md:table-cell">{r.framework}</TableCell>
-                    <TableCell className="hidden text-xs text-muted-foreground sm:table-cell">{r.period}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Progress value={r.coveragePct} className="h-1.5 w-16" />
-                        <span className="font-mono text-xs text-foreground">{r.coveragePct}%</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <StatusPill tone={st.tone}>{r.status}</StatusPill>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                      >
-                        <Download className="size-3" /> PDF
-                      </button>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+                      </TableCell>
+                      <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
+                        {FRAMEWORK_LABEL[r.framework] ?? r.framework}
+                      </TableCell>
+                      <TableCell className="hidden text-xs text-muted-foreground sm:table-cell">{r.period}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Progress value={r.coveragePct} className="h-1.5 w-16" />
+                          <span className="font-mono text-xs text-foreground">{r.coveragePct}%</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <StatusPill tone={st.tone}>{r.status}</StatusPill>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          <Download className="size-3" /> PDF
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>
