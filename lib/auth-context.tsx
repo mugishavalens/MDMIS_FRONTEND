@@ -1,8 +1,9 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { RoleUser } from '@/lib/rbac'
-import { apiFetch, ApiError, setTokens, clearTokens, getAccessToken } from '@/lib/api'
+import { apiFetch, ApiError, setTokens, clearTokens, getAccessToken, setSessionExpiredHandler } from '@/lib/api'
 
 // Login is normally a one-step, password-only sign-in. The only time it
 // resolves to `verified: false` is the edge case where someone registered
@@ -25,6 +26,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 const USER_CACHE_KEY = 'mdmis_user'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter()
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [user, setUser] = useState<RoleUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -53,12 +55,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(freshUser)
         setIsAuthenticated(true)
         sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(freshUser))
-      } catch {
-        // Refresh token also expired/invalid — clear the stale session.
-        clearTokens()
-        sessionStorage.removeItem(USER_CACHE_KEY)
-        setUser(null)
-        setIsAuthenticated(false)
+      } catch (err) {
+        // Only a real 401 (access + refresh both rejected) means the session
+        // is actually dead — clear it. Anything else (a 500, a dropped DB
+        // connection, a network blip) is a transient backend problem, not an
+        // invalid session: keep the optimistic cached user logged in rather
+        // than punting them to /login for an error that isn't theirs.
+        if (err instanceof ApiError && err.status === 401) {
+          clearTokens()
+          sessionStorage.removeItem(USER_CACHE_KEY)
+          setUser(null)
+          setIsAuthenticated(false)
+        }
       } finally {
         setIsLoading(false)
       }
@@ -125,6 +133,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearTokens()
     sessionStorage.removeItem(USER_CACHE_KEY)
   }
+
+  // If a refresh token dies mid-session (expired/revoked), apiFetch can't
+  // silently recover — force a real logout and bounce to /login right away
+  // instead of leaving the UI stuck showing a "logged in" state that 401s
+  // on every request until the next full page reload.
+  useEffect(() => {
+    setSessionExpiredHandler(() => {
+      logout()
+      router.push('/login')
+    })
+    return () => setSessionExpiredHandler(null)
+  })
 
   return (
     <AuthContext.Provider value={{ isAuthenticated, user, login, verifyOtp, resendOtp, logout }}>

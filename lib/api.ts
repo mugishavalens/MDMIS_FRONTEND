@@ -6,6 +6,16 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
 const ACCESS_KEY = 'mdmis_access_token'
 const REFRESH_KEY = 'mdmis_refresh_token'
 
+// Fires when a request's 401 can't be resolved by a token refresh (refresh
+// token expired/invalid). AuthProvider registers a handler here so a dead
+// session gets logged out and redirected immediately, even mid-session —
+// not just on the next full page load.
+let sessionExpiredHandler: (() => void) | null = null
+
+export function setSessionExpiredHandler(handler: (() => void) | null) {
+  sessionExpiredHandler = handler
+}
+
 export function getAccessToken(): string | null {
   if (typeof window === 'undefined') return null
   return sessionStorage.getItem(ACCESS_KEY)
@@ -46,6 +56,7 @@ async function refreshAccessToken(): Promise<string | null> {
   })
   if (!res.ok) {
     clearTokens()
+    sessionExpiredHandler?.()
     return null
   }
   const data = await res.json()
