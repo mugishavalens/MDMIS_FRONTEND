@@ -7,6 +7,8 @@ import { StatusPill } from '@/components/shell/status-pill'
 import { RoleGuard } from '@/components/shell/role-guard'
 import { PERMISSIONS, ROLE_THEME, type Role } from '@/lib/rbac'
 import { apiFetch, ApiError } from '@/lib/api'
+import { fetchAuditLogs, fetchAuditSummary, AUDIT_ACTION_LABEL, auditLevel, type AuditLog } from '@/lib/api/audit'
+import { timeAgo } from '@/lib/mdmis-data'
 
 interface OrgUser {
   name: string
@@ -32,15 +34,6 @@ const INVITABLE_ROLES = [
   { value: 'mine_manager', label: 'Mine Analyst' },
 ]
 
-const AUDIT_LOGS = [
-  { id: 1, user: 'D. Nzeyimana', action: 'Viewed scan SCN-24810', resource: 'Scans', time: '2 min ago', level: 'info' },
-  { id: 2, user: 'J. Habimana', action: 'Annotated site RW-RTG-01', resource: 'Map', time: '15 min ago', level: 'info' },
-  { id: 3, user: 'C. Mukamana', action: 'Submitted OECD Q2 report', resource: 'Compliance', time: '1h ago', level: 'success' },
-  { id: 4, user: 'System', action: 'GPS integrity lost on SHP-4023', resource: 'Transport', time: '2h ago', level: 'warning' },
-  { id: 5, user: 'D. Nzeyimana', action: 'Exported scan report PDF', resource: 'Scans', time: '3h ago', level: 'info' },
-  { id: 6, user: 'System', action: 'Critical safety score at Musha Cassiterite', resource: 'Sites', time: '4h ago', level: 'danger' },
-]
-
 function roleTone(role: string) {
   return (role in ROLE_THEME ? ROLE_THEME[role as Role].tone : 'neutral')
 }
@@ -51,6 +44,10 @@ export function AdminView() {
   const [users, setUsers] = useState<OrgUser[]>([])
   const [invitations, setInvitations] = useState<Invitation[]>([])
   const [loadingUsers, setLoadingUsers] = useState(true)
+
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
+  const [eventsToday, setEventsToday] = useState<number | null>(null)
+  const [loadingAudit, setLoadingAudit] = useState(true)
 
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState(INVITABLE_ROLES[0].value)
@@ -75,6 +72,21 @@ export function AdminView() {
   }
 
   useEffect(() => { loadUsersAndInvites() }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([fetchAuditLogs(), fetchAuditSummary()])
+      .then(([logs, summary]) => {
+        if (cancelled) return
+        setAuditLogs(logs)
+        setEventsToday(summary.eventsToday)
+      })
+      .catch(() => {
+        // Non-admin viewers simply see nothing, same as loadUsersAndInvites.
+      })
+      .finally(() => { if (!cancelled) setLoadingAudit(false) })
+    return () => { cancelled = true }
+  }, [])
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault()
@@ -110,7 +122,7 @@ export function AdminView() {
   const systemStats = [
     { label: 'Total Users', value: String(users.length), icon: Users, color: 'text-primary' },
     { label: 'Pending Invitations', value: String(pendingInvites.length), icon: Clock, color: 'text-destructive' },
-    { label: 'Audit Events Today', value: '47', icon: Eye, color: 'text-[var(--success)]' },
+    { label: 'Audit Events Today', value: eventsToday != null ? String(eventsToday) : '—', icon: Eye, color: 'text-[var(--success)]' },
     { label: 'Active Sessions', value: '—', icon: Activity, color: 'text-accent' },
   ]
 
@@ -250,18 +262,27 @@ export function AdminView() {
               <CardDescription>All user actions logged per OECD compliance requirements</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              {AUDIT_LOGS.map((log) => (
-                <div key={log.id} className="flex items-center gap-3 rounded-lg border border-border bg-background/40 px-4 py-2.5">
-                  <span className={`size-2 shrink-0 rounded-full ${log.level === 'danger' ? 'bg-destructive' : log.level === 'warning' ? 'bg-primary' : log.level === 'success' ? 'bg-[var(--success)]' : 'bg-accent'}`} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-foreground"><span className="font-medium">{log.user}</span> — {log.action}</p>
-                    <p className="text-xs text-muted-foreground">{log.resource} · {log.time}</p>
+              {loadingAudit ? (
+                <p className="text-sm text-muted-foreground text-center py-6">Loading audit trail…</p>
+              ) : auditLogs.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">No audit events recorded yet.</p>
+              ) : auditLogs.map((log) => {
+                const level = auditLevel(log.action)
+                return (
+                  <div key={log.id} className="flex items-center gap-3 rounded-lg border border-border bg-background/40 px-4 py-2.5">
+                    <span className={`size-2 shrink-0 rounded-full ${level === 'danger' ? 'bg-destructive' : level === 'warning' ? 'bg-primary' : level === 'success' ? 'bg-[var(--success)]' : 'bg-accent'}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-foreground">
+                        <span className="font-medium">{log.actorName}</span> — {AUDIT_ACTION_LABEL[log.action] ?? log.action}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {log.detail || log.resourceType} · {timeAgo(log.created_at)}
+                      </p>
+                    </div>
+                    <StatusPill tone={level}>{level}</StatusPill>
                   </div>
-                  <StatusPill tone={log.level === 'danger' ? 'danger' : log.level === 'warning' ? 'warning' : log.level === 'success' ? 'success' : 'info'}>
-                    {log.level}
-                  </StatusPill>
-                </div>
-              ))}
+                )
+              })}
             </CardContent>
           </Card>
         )}
