@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { Radar, ScanLine, Layers, ShieldAlert, TrendingUp, TrendingDown } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { fmtNumber } from '@/lib/mdmis-data'
-import { fetchDashboardSummary, type DashboardSummary } from '@/lib/api/dashboard'
+import { type DashboardSummary } from '@/lib/api/dashboard'
+import { useDashboardSummary } from '@/lib/dashboard-context'
 import { cn } from '@/lib/utils'
 
 // These 4 trend strings have no real backing data source (no "permits"
@@ -50,15 +50,7 @@ function buildCards(k: DashboardSummary) {
 }
 
 export function KpiCards() {
-  const [summary, setSummary] = useState<DashboardSummary | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    fetchDashboardSummary()
-      .then((data) => { if (!cancelled) setSummary(data) })
-      .catch((err) => console.error('[MDMIS] Failed to load dashboard summary:', err))
-    return () => { cancelled = true }
-  }, [])
+  const { summary } = useDashboardSummary()
 
   const cards = summary ? buildCards(summary) : []
 

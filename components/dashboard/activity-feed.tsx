@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { ScanLine, AlertTriangle, Truck, ShieldCheck, Link2, type LucideIcon } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { timeAgo } from '@/lib/mdmis-data'
-import { fetchDashboardSummary, type ActivityItem } from '@/lib/api/dashboard'
+import { type ActivityItem } from '@/lib/api/dashboard'
+import { useDashboardSummary } from '@/lib/dashboard-context'
 import { cn } from '@/lib/utils'
 
 const KIND: Record<ActivityItem['kind'], { icon: LucideIcon; tone: string }> = {
@@ -16,17 +16,8 @@ const KIND: Record<ActivityItem['kind'], { icon: LucideIcon; tone: string }> = {
 }
 
 export function ActivityFeed() {
-  const [activity, setActivity] = useState<ActivityItem[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    fetchDashboardSummary()
-      .then((data) => { if (!cancelled) setActivity(data.activity) })
-      .catch((err) => console.error('[MDMIS] Failed to load activity feed:', err))
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [])
+  const { summary, loading } = useDashboardSummary()
+  const activity: ActivityItem[] = summary?.activity ?? []
 
   return (
     <Card className="border-border bg-card">

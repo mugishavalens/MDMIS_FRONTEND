@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Bar, BarChart, Cell } from 'recharts'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import {
@@ -10,7 +9,7 @@ import {
   type ChartConfig,
 } from '@/components/ui/chart'
 import { MINERAL_META } from '@/lib/mdmis-data'
-import { fetchDashboardSummary, type DashboardSummary } from '@/lib/api/dashboard'
+import { useDashboardSummary } from '@/lib/dashboard-context'
 
 const trendConfig = {
   detections: { label: 'Detections', color: 'var(--chart-1)' },
@@ -24,15 +23,7 @@ const distConfig = {
 const FALLBACK_MINERAL_COLOR = '#9b6dff'
 
 export function DetectionCharts() {
-  const [summary, setSummary] = useState<DashboardSummary | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    fetchDashboardSummary()
-      .then((data) => { if (!cancelled) setSummary(data) })
-      .catch((err) => console.error('[MDMIS] Failed to load dashboard summary:', err))
-    return () => { cancelled = true }
-  }, [])
+  const { summary } = useDashboardSummary()
 
   const monthlyTrend = summary?.monthlyTrend ?? []
   const mineralDistribution = summary?.mineralDistribution ?? []
