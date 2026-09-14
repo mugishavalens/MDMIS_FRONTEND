@@ -23,24 +23,27 @@ export interface RoleUser {
 export const PERMISSIONS: Record<Role, string[]> = {
   geologist: [
     'dashboard.view', 'map.view', 'map.annotate', 'scans.view', 'scans.classify', 'traceability.view',
+    'safety.view',
   ],
   mine_manager: [
     'dashboard.view', 'map.view', 'map.annotate', 'scans.view', 'scans.classify',
     'traceability.view', 'traceability.edit', 'transport.view', 'compliance.view',
+    'safety.view', 'safety.acknowledge',
   ],
   compliance_manager: [
     'dashboard.view', 'compliance.view', 'compliance.submit', 'compliance.edit',
-    'traceability.view', 'transport.view', 'scans.view',
+    'traceability.view', 'transport.view', 'scans.view', 'safety.view',
   ],
   org_admin: [
     'dashboard.view', 'dashboard.admin', 'map.view', 'map.annotate', 'scans.view', 'scans.classify',
     'traceability.view', 'traceability.edit', 'transport.view', 'compliance.view', 'compliance.submit',
-    'users.manage', 'users.invite', 'audit.view',
+    'users.manage', 'users.invite', 'audit.view', 'safety.view', 'safety.acknowledge',
   ],
   system_admin: [
     'dashboard.view', 'dashboard.admin', 'map.view', 'map.edit', 'scans.view', 'scans.classify', 'scans.delete',
     'traceability.view', 'traceability.edit', 'transport.view', 'transport.edit', 'compliance.view',
     'compliance.submit', 'compliance.approve', 'users.manage', 'users.invite', 'audit.view', 'system.configure',
+    'safety.view', 'safety.acknowledge',
   ],
 }
 
@@ -66,9 +69,9 @@ export const ROLE_THEME: Record<Role, { tone: RoleTone; text: string; bg: string
 
 // Nav items visible per role - updated for unified map experience
 export const ROLE_NAV: Record<Role, string[]> = {
-  geologist: ['/dashboard', '/map', '/scans', '/traceability'],
-  mine_manager: ['/dashboard', '/map', '/scans', '/traceability', '/transport', '/compliance'],
-  compliance_manager: ['/dashboard', '/compliance', '/traceability', '/transport', '/scans'],
-  org_admin: ['/dashboard', '/map', '/scans', '/traceability', '/transport', '/compliance', '/admin'],
-  system_admin: ['/dashboard', '/map', '/scans', '/traceability', '/transport', '/compliance', '/admin'],
+  geologist: ['/dashboard', '/map', '/scans', '/traceability', '/safety'],
+  mine_manager: ['/dashboard', '/map', '/scans', '/traceability', '/transport', '/compliance', '/safety'],
+  compliance_manager: ['/dashboard', '/compliance', '/traceability', '/transport', '/scans', '/safety'],
+  org_admin: ['/dashboard', '/map', '/scans', '/traceability', '/transport', '/compliance', '/admin', '/safety'],
+  system_admin: ['/dashboard', '/map', '/scans', '/traceability', '/transport', '/compliance', '/admin', '/safety'],
 }
