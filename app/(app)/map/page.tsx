@@ -1,15 +1,15 @@
 import { TopBar } from '@/components/shell/topbar'
-import { MapExplorer } from '@/components/map/map-explorer'
+import { CesiumExplorer } from '@/components/map/cesium-explorer'
 
 export default function MapPage() {
   return (
     <>
       <TopBar
-        title="3D Subsurface Geospatial Explorer"
-        subtitle="Interactive geological mapping with depth profiling, mineral deposit visualization & real-time risk assessment"
+        title="Intelligence Explorer"
+        subtitle="3D satellite globe with integrated terrain inspection · Cesium World Terrain · click sites to explore subsurface"
       />
       <div className="flex-1 overflow-hidden">
-        <MapExplorer />
+        <CesiumExplorer />
       </div>
     </>
   )

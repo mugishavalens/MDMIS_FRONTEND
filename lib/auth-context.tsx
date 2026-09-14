@@ -35,7 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function rehydrate() {
       const token = getAccessToken()
-      const cached = localStorage.getItem(USER_CACHE_KEY)
+      const cached = sessionStorage.getItem(USER_CACHE_KEY)
       if (!token || !cached) {
         setIsLoading(false)
         return
@@ -45,18 +45,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(cachedUser)
         setIsAuthenticated(true)
       } catch {
-        localStorage.removeItem(USER_CACHE_KEY)
+        sessionStorage.removeItem(USER_CACHE_KEY)
       }
 
       try {
         const freshUser = await apiFetch<RoleUser>('/auth/me/')
         setUser(freshUser)
         setIsAuthenticated(true)
-        localStorage.setItem(USER_CACHE_KEY, JSON.stringify(freshUser))
+        sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(freshUser))
       } catch {
         // Refresh token also expired/invalid — clear the stale session.
         clearTokens()
-        localStorage.removeItem(USER_CACHE_KEY)
+        sessionStorage.removeItem(USER_CACHE_KEY)
         setUser(null)
         setIsAuthenticated(false)
       } finally {
@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { verified: false, email: data.email }
       }
       setTokens(data.access, data.refresh)
-      localStorage.setItem(USER_CACHE_KEY, JSON.stringify(data.user))
+      sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(data.user))
       setUser(data.user)
       setIsAuthenticated(true)
       return { verified: true }
@@ -97,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         { auth: false },
       )
       setTokens(data.access, data.refresh)
-      localStorage.setItem(USER_CACHE_KEY, JSON.stringify(data.user))
+      sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(data.user))
       setUser(data.user)
       setIsAuthenticated(true)
     } catch (err) {
@@ -123,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsAuthenticated(false)
     setUser(null)
     clearTokens()
-    localStorage.removeItem(USER_CACHE_KEY)
+    sessionStorage.removeItem(USER_CACHE_KEY)
   }
 
   return (

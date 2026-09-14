@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import {
   Loader2, MapPin, Layers, Gauge, ShieldAlert, Boxes,
   Drill, Mountain, Scan, Search, X, Globe, ChevronRight,
+  ArrowLeft, EyeOff, RotateCcw,
 } from 'lucide-react'
 import {
   SITES, RISK_META, MINERAL_META, fmtNumber, timeAgo,
@@ -24,6 +25,16 @@ const CesiumGlobe = dynamic(() => import('@/components/map/cesium-globe'), {
       <Loader2 className="size-7 animate-spin text-primary" />
       <span className="text-sm font-medium text-white/70">Loading 3D globe…</span>
       <span className="text-xs text-white/30">Cesium World Terrain · Bing satellite imagery</span>
+    </div>
+  ),
+})
+
+const SiteTerrainBlock = dynamic(() => import('@/components/map/site-terrain-block'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full items-center justify-center text-muted-foreground bg-[oklch(0.13_0.01_250)]">
+      <Loader2 className="mr-2 size-5 animate-spin" />
+      <span className="text-sm">Carving subsurface terrain block…</span>
     </div>
   ),
 })
@@ -53,21 +64,45 @@ function Metric({ icon: Icon, label, value, sub }: {
 export function CesiumExplorer() {
   const router = useRouter()
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [visibleIds, setVisibleIds] = useState<string[]>(SITES.map((s) => s.id))
+  const [visibleIds, setVisibleIds] = useState(() => SITES.map((s) => s.id))
   const [globeKey, setGlobeKey] = useState(0)
   const [query, setQuery] = useState('')
 
+  // Unified State
+  const [viewMode, setViewMode] = useState<'globe' | 'terrain'>('globe')
+  const [xray, setXray] = useState(false)
+  const [resetSignal, setResetSignal] = useState(0)
+  const [mapKey, setMapKey] = useState(0)
+
   const selected = SITES.find((s) => s.id === selectedId) ?? null
+
+  // Handle URL parameters for deep linking
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const siteParam = urlParams.get('site')
+    const viewParam = urlParams.get('view')
+    
+    if (siteParam && SITES.find(s => s.id === siteParam)) {
+      setSelectedId(siteParam)
+      if (viewParam === 'terrain') {
+        setViewMode('terrain')
+      }
+      // Clean up URL
+      const newUrl = window.location.pathname
+      window.history.replaceState({}, '', newUrl)
+    }
+  }, [])
 
   // Listen for the inspect event dispatched by the Cesium overlay button
   useEffect(() => {
     const handler = (e: Event) => {
       const siteId = (e as CustomEvent<{ siteId: string }>).detail.siteId
-      router.push(`/map/inspect/${siteId}`)
+      setSelectedId(siteId)
+      setViewMode('terrain')
     }
     window.addEventListener('cesium:inspect', handler)
     return () => window.removeEventListener('cesium:inspect', handler)
-  }, [router])
+  }, [])
 
   const filteredSites = SITES.filter((s) => {
     const inView = visibleIds.includes(s.id)
@@ -92,48 +127,123 @@ export function CesiumExplorer() {
         )
       : SITES
 
-  const handleSelect  = useCallback((site: DetectionSite) => setSelectedId(site.id), [])
-  const handleInspect = useCallback((site: DetectionSite) => router.push(`/map/inspect/${site.id}`), [router])
+  const handleSelect  = useCallback((site: DetectionSite) => {
+    setSelectedId(site.id)
+    // If we select a new site while in terrain mode, we go back to globe for context
+    if (viewMode === 'terrain' && site.id !== selectedId) {
+      setViewMode('globe')
+    }
+  }, [selectedId, viewMode])
+
+  const handleInspect = useCallback((site: DetectionSite) => {
+    setSelectedId(site.id)
+    setViewMode('terrain')
+  }, [])
+
   const handleVisible = useCallback((ids: string[]) => setVisibleIds(ids), [])
 
   return (
     <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[1fr_320px] lg:grid-rows-1 lg:grid-cols-[1fr_340px]">
 
-      {/* ── Globe ────────────────────────────────────────────────────────── */}
+      {/* ── 3D View Container ────────────────────────────────────────────── */}
       <div className="relative h-full min-h-[380px] overflow-hidden bg-[#05080f]">
-        <Map3DErrorBoundary label="3D globe" onRetry={() => setGlobeKey((k) => k + 1)}>
-          <CesiumGlobe
-            key={globeKey}
-            selectedId={selectedId}
-            onSelect={handleSelect}
-            onInspect={handleInspect}
-            onVisibleSitesChange={handleVisible}
-          />
+        <Map3DErrorBoundary
+          label={viewMode === 'terrain' ? '3D terrain block' : '3D globe'}
+          onRetry={() => {
+            setGlobeKey((k) => k + 1)
+            setMapKey((k) => k + 1)
+          }}
+        >
+          {viewMode === 'terrain' && selected ? (
+            <div className="h-full w-full bg-[oklch(0.13_0.01_250)]">
+              <SiteTerrainBlock
+                key={mapKey}
+                site={selected}
+                xray={xray}
+                resetSignal={resetSignal}
+                onContextLost={() => setMapKey((k) => k + 1)}
+              />
+            </div>
+          ) : (
+            <CesiumGlobe
+              key={globeKey}
+              selectedId={selectedId}
+              onSelect={handleSelect}
+              onInspect={handleInspect}
+              onVisibleSitesChange={handleVisible}
+            />
+          )}
         </Map3DErrorBoundary>
 
-        {/* Legend */}
-        <div className="pointer-events-none absolute left-4 top-4">
-          <div className="rounded-lg border border-white/10 bg-[#0a0d18]/88 p-3 text-xs backdrop-blur">
-            <p className="mb-2 flex items-center gap-1.5 font-semibold text-white">
-              <Layers className="size-3.5 text-primary" /> Mining Sites
-            </p>
-            <ul className="space-y-1.5">
-              {(['low', 'moderate', 'high', 'critical'] as const).map((r) => (
-                <li key={r} className="flex items-center gap-2 text-white/55">
-                  <span className="size-2 rounded-full" style={{ background: RISK_HEX[r] }} />
-                  {RISK_META[r].label} risk
+        {/* Legend (Globe Only) */}
+        {viewMode === 'globe' && (
+          <div className="pointer-events-none absolute left-4 top-4">
+            <div className="rounded-lg border border-white/10 bg-[#0a0d18]/88 p-3 text-xs backdrop-blur">
+              <p className="mb-2 flex items-center gap-1.5 font-semibold text-white">
+                <Layers className="size-3.5 text-primary" /> Mining Sites
+              </p>
+              <ul className="space-y-1.5">
+                {(['low', 'moderate', 'high', 'critical'] as const).map((r) => (
+                  <li key={r} className="flex items-center gap-2 text-white/55">
+                    <span className="size-2 rounded-full" style={{ background: RISK_HEX[r] }} />
+                    {RISK_META[r].label} risk
+                  </li>
+                ))}
+                <li className="mt-1.5 flex items-center gap-2 border-t border-white/10 pt-1.5 text-white/55">
+                  <span className="size-2 rounded-full border-2 border-[#9b6dff] bg-transparent" />
+                  Mineral ring colour
                 </li>
-              ))}
-              <li className="mt-1.5 flex items-center gap-2 border-t border-white/10 pt-1.5 text-white/55">
-                <span className="size-2 rounded-full border-2 border-[#9b6dff] bg-transparent" />
-                Mineral ring colour
-              </li>
-            </ul>
+              </ul>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Selected pill */}
-        {selected && (
+        {/* Terrain Controls Overlay */}
+        {viewMode === 'terrain' && selected && (
+          <div className="pointer-events-auto absolute left-4 top-4 space-y-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setViewMode('globe')}
+              className="gap-2 border-white/15 bg-[#0a0d18]/85 text-white backdrop-blur hover:bg-white/10"
+            >
+              <ArrowLeft className="size-3.5" />
+              Back to global globe
+            </Button>
+            <div className="rounded-lg border border-white/15 bg-[#0a0d18]/85 p-3 text-xs text-white backdrop-blur">
+              <p className="mb-1 flex items-center gap-1.5 font-medium">
+                <Mountain className="size-3.5 text-primary" /> {selected.name}
+              </p>
+              <p className="text-white/60">
+                {selected.primaryMineral} deposit · {selected.depthMeters}m depth
+              </p>
+            </div>
+            <Button
+              variant={xray ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setXray(!xray)}
+              className={cn(
+                'w-full justify-start gap-2 border-white/15 backdrop-blur',
+                !xray && 'bg-[#0a0d18]/85 text-white hover:bg-white/10'
+              )}
+            >
+              {xray ? <EyeOff className="size-3.5" /> : <Scan className="size-3.5" />}
+              {xray ? 'Solid Ground' : 'X-Ray View'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setResetSignal((n) => n + 1)}
+              className="w-full justify-start gap-2 border-white/15 bg-[#0a0d18]/85 text-white backdrop-blur hover:bg-white/10"
+            >
+              <RotateCcw className="size-3.5" />
+              Reset View
+            </Button>
+          </div>
+        )}
+
+        {/* Selected pill (Globe Only) */}
+        {viewMode === 'globe' && selected && (
           <div className="pointer-events-auto absolute bottom-14 left-1/2 -translate-x-1/2">
             <div className="flex items-center gap-2 rounded-full border border-white/15 bg-[#0a0d18]/92 px-4 py-2 shadow-xl backdrop-blur">
               <span className="size-2 rounded-full" style={{ background: RISK_HEX[selected.riskLevel] }} />
@@ -148,6 +258,12 @@ export function CesiumExplorer() {
             </div>
           </div>
         )}
+
+        <div className="pointer-events-none absolute bottom-4 left-4 font-mono text-[10px] uppercase tracking-widest text-white/40">
+          {viewMode === 'terrain'
+            ? 'MDMIS · Subsurface Terrain Block · drag to orbit · scroll to zoom'
+            : 'MDMIS · 3D Satellite Globe · drag · zoom · click sites'}
+        </div>
       </div>
 
       {/* ── Side panel ───────────────────────────────────────────────────── */}
@@ -259,9 +375,13 @@ export function CesiumExplorer() {
               </div>
             )}
 
-            <Button className="w-full gap-2" onClick={() => handleInspect(selected)}>
+            <Button
+              className="w-full gap-2"
+              onClick={() => handleInspect(selected)}
+              disabled={viewMode === 'terrain'}
+            >
               <Mountain className="size-3.5" />
-              Open Full Terrain Inspection
+              {viewMode === 'terrain' ? 'Viewing Terrain Inspection' : 'Open Full Terrain Inspection'}
               <ChevronRight className="ml-auto size-3.5" />
             </Button>
           </div>
@@ -311,10 +431,15 @@ export function CesiumExplorer() {
                 {active && (
                   <button type="button"
                     onClick={(e) => { e.stopPropagation(); handleInspect(s) }}
-                    className="shrink-0 rounded-md border border-primary/30 bg-primary/10 p-1 hover:bg-primary/20 transition-colors"
+                    className={cn(
+                      "shrink-0 rounded-md border p-1 transition-colors",
+                      viewMode === 'terrain'
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+                    )}
                     title="Inspect terrain block"
                   >
-                    <Scan className="size-3 text-primary" />
+                    <Scan className="size-3" />
                   </button>
                 )}
               </div>

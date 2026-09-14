@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Plane,
   Radar as RadarIcon,
@@ -10,6 +10,9 @@ import {
   CheckCircle2,
   Clock,
   Eye,
+  X,
+  Maximize2,
+  Minimize2,
   type LucideIcon,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
@@ -32,59 +35,145 @@ function statusMeta(s: Scan['status']) {
 }
 
 export function ScansView() {
-  const [selectedId, setSelectedId] = useState<string>(SCANS[0].id)
-  const scan = SCANS.find((s) => s.id === selectedId)!
+  const [openId, setOpenId] = useState<string | null>(null)
+  const openScan = openId ? SCANS.find((s) => s.id === openId) ?? null : null
 
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_400px]">
-      {/* scan list */}
-      <div className="space-y-2">
-        {SCANS.map((s) => {
-          const MethodIcon = METHOD_ICON[s.method]
-          const st = statusMeta(s.status)
-          const active = s.id === selectedId
-          return (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => setSelectedId(s.id)}
-              className={cn(
-                'flex w-full items-center gap-4 rounded-lg border bg-card px-4 py-3 text-left transition-all',
-                active 
-                  ? 'border-primary/50 ring-2 ring-primary/20 shadow-md shadow-primary/10' 
-                  : 'border-border hover:border-primary/30 hover:shadow-sm',
-              )}
+    <div className="space-y-2">
+      {SCANS.map((s) => {
+        const MethodIcon = METHOD_ICON[s.method]
+        const st = statusMeta(s.status)
+        return (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => setOpenId(s.id)}
+            className="flex w-full items-center gap-4 rounded-lg border border-border bg-card px-4 py-3 text-left transition-all hover:border-primary/30 hover:shadow-sm"
+          >
+            <span
+              className="flex size-10 shrink-0 items-center justify-center rounded-md"
+              style={{ background: `color-mix(in oklch, ${MINERAL_META[s.classification].color} 15%, transparent)` }}
             >
-              <span
-                className="flex size-10 shrink-0 items-center justify-center rounded-md"
-                style={{ background: `color-mix(in oklch, ${MINERAL_META[s.classification].color} 15%, transparent)` }}
-              >
-                <MethodIcon className="size-5" style={{ color: MINERAL_META[s.classification].color }} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs text-muted-foreground">{s.id}</span>
-                  <StatusPill tone={st.tone}>{st.label}</StatusPill>
-                </div>
-                <p className="mt-0.5 truncate text-sm font-medium text-foreground">
-                  {s.classification} <span className="text-muted-foreground">· {s.siteName}</span>
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {s.method} · {s.operator} · {fmtDateTime(s.capturedAt)}
-                </p>
+              <MethodIcon className="size-5" style={{ color: MINERAL_META[s.classification].color }} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs text-muted-foreground">{s.id}</span>
+                <StatusPill tone={st.tone}>{st.label}</StatusPill>
               </div>
-              <div className="shrink-0 text-right">
-                <p className="font-mono text-base font-semibold text-foreground">{s.confidence}%</p>
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">confidence</p>
-              </div>
-            </button>
-          )
-        })}
-      </div>
+              <p className="mt-0.5 truncate text-sm font-medium text-foreground">
+                {s.classification} <span className="text-muted-foreground">· {s.siteName}</span>
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                {s.method} · {s.operator} · {fmtDateTime(s.capturedAt)}
+              </p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="font-mono text-base font-semibold text-foreground">{s.confidence}%</p>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">confidence</p>
+            </div>
+          </button>
+        )
+      })}
 
-      {/* classification detail */}
-      <Card className="h-fit border-border bg-card xl:sticky xl:top-0">
-        <CardHeader>
+      {openScan && <ScanClassificationModal scan={openScan} onClose={() => setOpenId(null)} />}
+    </div>
+  )
+}
+
+function ScanClassificationModal({ scan, onClose }: { scan: Scan; onClose: () => void }) {
+  const [expanded, setExpanded] = useState(false)
+
+  // Esc to close + lock background scroll while the popup is open
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [onClose])
+
+  const predictedMineral = (
+    <div className="rounded-lg border border-primary/25 bg-primary/8 p-4 text-center">
+      <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Predicted mineral</p>
+      <p className="mt-1 text-2xl font-semibold text-foreground">{scan.classification}</p>
+      <p className="font-mono text-xs text-muted-foreground">
+        {MINERAL_META[scan.classification].symbol} · {MINERAL_META[scan.classification].commodity}
+      </p>
+      <p className="mt-2 font-mono text-sm text-primary">{scan.confidence}% confidence</p>
+    </div>
+  )
+
+  const stats = (
+    <div className="grid grid-cols-3 gap-2 text-center">
+      <Stat label="Grade" value={`${scan.gradePct}%`} />
+      <Stat label="Bands" value={scan.spectralBands ? String(scan.spectralBands) : '—'} />
+      <Stat label="Area" value={`${scan.areaHa} ha`} />
+    </div>
+  )
+
+  const classProbabilities = (
+    <div>
+      <p className="mb-2 text-xs font-medium text-muted-foreground">Class probabilities</p>
+      <div className="space-y-2.5">
+        {scan.alternatives.map((alt) => (
+          <div key={alt.mineral}>
+            <div className="mb-1 flex items-center justify-between text-xs">
+              <span className="text-foreground">{alt.mineral}</span>
+              <span className="font-mono text-muted-foreground">{alt.probability}%</span>
+            </div>
+            <Progress value={alt.probability} className="h-1.5" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+
+  const modelNote = (
+    <p className="rounded-md bg-secondary/50 p-3 text-xs leading-relaxed text-muted-foreground">
+      Model <span className="font-mono text-foreground">mdmis-specnet-v4</span> fused{' '}
+      {scan.spectralBands > 0 ? `${scan.spectralBands} spectral bands` : 'geophysical response'} with
+      historical belt priors. Confidence above 90% is auto-accepted; lower scores are routed to human review.
+    </p>
+  )
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-4 backdrop-blur-[2px]"
+      onClick={onClose}
+    >
+      <Card
+        className={cn(
+          'w-full border-border bg-card shadow-2xl transition-all max-h-[90vh] overflow-y-auto scrollbar-thin',
+          expanded ? 'max-w-4xl' : 'max-w-lg',
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <CardHeader className="relative">
+          <div className="absolute right-4 top-4 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              aria-label={expanded ? 'Collapse' : 'Expand'}
+              title={expanded ? 'Collapse' : 'Expand'}
+              className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            >
+              {expanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
           <div className="flex items-center gap-2">
             <Cpu className="size-4 text-primary" />
             <CardTitle className="text-sm">AI Classification — {scan.id}</CardTitle>
@@ -94,41 +183,25 @@ export function ScansView() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="rounded-lg border border-primary/25 bg-primary/8 p-4 text-center">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Predicted mineral</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">{scan.classification}</p>
-            <p className="font-mono text-xs text-muted-foreground">
-              {MINERAL_META[scan.classification].symbol} · {MINERAL_META[scan.classification].commodity}
-            </p>
-            <p className="mt-2 font-mono text-sm text-primary">{scan.confidence}% confidence</p>
-          </div>
-
-          <div>
-            <p className="mb-2 text-xs font-medium text-muted-foreground">Class probabilities</p>
-            <div className="space-y-2.5">
-              {scan.alternatives.map((alt) => (
-                <div key={alt.mineral}>
-                  <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="text-foreground">{alt.mineral}</span>
-                    <span className="font-mono text-muted-foreground">{alt.probability}%</span>
-                  </div>
-                  <Progress value={alt.probability} className="h-1.5" />
-                </div>
-              ))}
+          {expanded ? (
+            <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-5">
+                {predictedMineral}
+                {stats}
+              </div>
+              <div className="space-y-5">
+                {classProbabilities}
+                {modelNote}
+              </div>
             </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 border-t border-border pt-4 text-center">
-            <Stat label="Grade" value={`${scan.gradePct}%`} />
-            <Stat label="Bands" value={scan.spectralBands ? String(scan.spectralBands) : '—'} />
-            <Stat label="Area" value={`${scan.areaHa} ha`} />
-          </div>
-
-          <p className="rounded-md bg-secondary/50 p-3 text-xs leading-relaxed text-muted-foreground">
-            Model <span className="font-mono text-foreground">mdmis-specnet-v4</span> fused{' '}
-            {scan.spectralBands > 0 ? `${scan.spectralBands} spectral bands` : 'geophysical response'} with
-            historical belt priors. Confidence above 90% is auto-accepted; lower scores are routed to human review.
-          </p>
+          ) : (
+            <>
+              {predictedMineral}
+              {classProbabilities}
+              <div className="border-t border-border pt-4">{stats}</div>
+              {modelNote}
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

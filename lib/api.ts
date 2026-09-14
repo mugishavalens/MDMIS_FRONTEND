@@ -8,22 +8,22 @@ const REFRESH_KEY = 'mdmis_refresh_token'
 
 export function getAccessToken(): string | null {
   if (typeof window === 'undefined') return null
-  return localStorage.getItem(ACCESS_KEY)
+  return sessionStorage.getItem(ACCESS_KEY)
 }
 
 export function getRefreshToken(): string | null {
   if (typeof window === 'undefined') return null
-  return localStorage.getItem(REFRESH_KEY)
+  return sessionStorage.getItem(REFRESH_KEY)
 }
 
 export function setTokens(access: string, refresh: string) {
-  localStorage.setItem(ACCESS_KEY, access)
-  localStorage.setItem(REFRESH_KEY, refresh)
+  sessionStorage.setItem(ACCESS_KEY, access)
+  sessionStorage.setItem(REFRESH_KEY, refresh)
 }
 
 export function clearTokens() {
-  localStorage.removeItem(ACCESS_KEY)
-  localStorage.removeItem(REFRESH_KEY)
+  sessionStorage.removeItem(ACCESS_KEY)
+  sessionStorage.removeItem(REFRESH_KEY)
 }
 
 export class ApiError extends Error {
@@ -49,8 +49,8 @@ async function refreshAccessToken(): Promise<string | null> {
     return null
   }
   const data = await res.json()
-  localStorage.setItem(ACCESS_KEY, data.access)
-  if (data.refresh) localStorage.setItem(REFRESH_KEY, data.refresh)
+  sessionStorage.setItem(ACCESS_KEY, data.access)
+  if (data.refresh) sessionStorage.setItem(REFRESH_KEY, data.refresh)
   return data.access as string
 }
 

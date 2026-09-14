@@ -13,8 +13,7 @@ import { ROLE_NAV } from '@/lib/rbac'
 
 const ALL_NAV = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/map/globe', label: 'Satellite Globe', icon: Satellite },
-  { href: '/map', label: 'Subsurface Explorer', icon: Globe2 },
+  { href: '/map', label: 'Intelligence Explorer', icon: Globe2 },
   { href: '/scans', label: 'Survey Analysis', icon: ScanLine },
   { href: '/traceability', label: 'Chain of Custody', icon: Link2 },
   { href: '/transport', label: 'Fleet Management', icon: Truck },
@@ -68,10 +67,9 @@ export function Sidebar() {
           Operations
         </p>
         {nav.map((item) => {
-          // /map/globe and /map/inspect/* must not highlight the /map entry,
-        // and /map must not highlight /map/globe — so we do an exact match
-        // first, then a prefix match that requires a '/' continuation AND
-        // that no other nav item is a more-specific prefix.
+          // /map/inspect/* redirects to /map with URL params now,
+          // so we do an exact match first, then a prefix match that requires 
+          // a '/' continuation AND that no other nav item is a more-specific prefix.
         const isExact = pathname === item.href
         const isPrefix = pathname.startsWith(item.href + '/') &&
           !ALL_NAV.some(

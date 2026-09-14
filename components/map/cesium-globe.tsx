@@ -104,6 +104,7 @@ export default function CesiumGlobe({
   const entitiesRef      = useRef<Map<string, any>>(new Map())
   const corridorsRef     = useRef<any[]>([])
   const depthPillarsRef  = useRef<any[]>([])
+  const wheelHandlerRef  = useRef<(e: WheelEvent) => void>(() => {})
 
   const [is3D, setIs3D]                         = useState(true)
   const [showDepthPillars, setShowDepthPillars] = useState(true)
@@ -148,6 +149,43 @@ export default function CesiumGlobe({
           viewerRef.current = viewer
           const scene = viewer.scene
           const globe = scene.globe
+
+          // ── Zoom Controls: guarantee scroll-wheel + touchpad pinch + touch-pinch all zoom ──
+          const cameraController = scene.screenSpaceCameraController
+          cameraController.enableZoom               = true
+          cameraController.zoomEventTypes           = [
+            Cesium.CameraEventType.WHEEL,
+            Cesium.CameraEventType.PINCH,
+            Cesium.CameraEventType.RIGHT_DRAG,
+          ]
+          cameraController.minimumZoomDistance       = 200
+          cameraController.maximumZoomDistance       = 20_000_000
+
+          // Trackpad wheel handling:
+          //  - pinch (ctrlKey set by the browser) → zoom, but stop the browser's own
+          //    page-zoom from stealing the gesture before Cesium's zoom handler sees it.
+          //  - plain two-finger swipe → pan the camera directly, no click required.
+          //  - a real mouse wheel notch → left untouched, falls through to Cesium's zoom.
+          // Browsers never expose finger count for a touchpad, only deltaX/deltaY/deltaMode,
+          // so "is this a trackpad swipe" is a heuristic (same approach libraries like
+          // Mapbox GL use): trackpads report pixel-mode deltas that are small and/or have
+          // a horizontal component; a mouse wheel reports one big fixed-size notch.
+          const isTrackpadSwipe = (e: WheelEvent) =>
+            e.deltaMode === 0 && (e.deltaX !== 0 || Math.abs(e.deltaY) < 40)
+
+          const onWheelCapture = (e: WheelEvent) => {
+            if (e.ctrlKey) {
+              e.preventDefault() // pinch-to-zoom: stop page zoom, let Cesium's zoom handle it
+              return
+            }
+            if (!isTrackpadSwipe(e)) return // real mouse wheel notch: let Cesium zoom as normal
+
+            e.preventDefault()
+            e.stopImmediatePropagation() // don't let Cesium's own WHEEL-zoom handler also fire
+            panCameraByScreenDelta(viewer, e.deltaX, e.deltaY)
+          }
+          wheelHandlerRef.current = onWheelCapture
+          scene.canvas.addEventListener('wheel', onWheelCapture, { capture: true, passive: false })
 
           // ── Add Base Imagery Layer (High-Resolution Esri World Imagery) ───
           const defaultImagery = new Cesium.UrlTemplateImageryProvider({
@@ -349,6 +387,7 @@ export default function CesiumGlobe({
       if (resizeObserver) resizeObserver.disconnect()
       removeInfoOverlay()
       if (viewerRef.current && !viewerRef.current.isDestroyed()) {
+        viewerRef.current.scene.canvas.removeEventListener('wheel', wheelHandlerRef.current, { capture: true })
         viewerRef.current.destroy()
       }
       viewerRef.current = null
@@ -478,6 +517,26 @@ export default function CesiumGlobe({
     if (!viewer) return
     viewer.camera.zoomOut(viewer.camera.positionCartographic.height * 0.4)
   }, [])
+
+  // ── Keyboard Zoom: +/- (and numpad equivalents) while the explorer is focused ──
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      const isTyping = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      if (isTyping || !containerRef.current) return
+      if (!containerRef.current.contains(document.activeElement) && document.activeElement !== document.body) return
+
+      if (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd') {
+        e.preventDefault()
+        zoomIn()
+      } else if (e.key === '-' || e.key === '_' || e.code === 'NumpadSubtract') {
+        e.preventDefault()
+        zoomOut()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [zoomIn, zoomOut])
 
   const togglePitch = useCallback(() => {
     const viewer = viewerRef.current
@@ -675,7 +734,7 @@ export default function CesiumGlobe({
       {/* ── Bottom Controls Help Bar ── */}
       <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
         <div className="rounded-full border border-white/10 bg-[#0a0d18]/85 px-4 py-1.5 font-mono text-[10px] uppercase tracking-widest text-white/50 backdrop-blur whitespace-nowrap shadow-xl">
-          Left-drag · orbit &nbsp;|&nbsp; Right-drag / scroll · zoom &nbsp;|&nbsp; Middle-drag · pan &nbsp;|&nbsp; Click site · details
+          Left-drag · orbit &nbsp;|&nbsp; 2-finger swipe · pan &nbsp;|&nbsp; Pinch / scroll / +&minus; keys · zoom &nbsp;|&nbsp; Click site · details
         </div>
       </div>
     </div>
@@ -683,6 +742,19 @@ export default function CesiumGlobe({
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Pans the camera in response to a two-finger touchpad swipe. There's no ground-plane
+ * "translate" API on a 3D Cesium camera, so this nudges it along its own right/forward
+ * axes — scaled by altitude so a swipe feels like the same on-screen distance whether
+ * zoomed in close or looking at the whole country.
+ */
+function panCameraByScreenDelta(viewer: any, deltaX: number, deltaY: number) {
+  const camera = viewer.camera
+  const moveRate = camera.positionCartographic.height * 0.0015
+  camera.moveRight(deltaX * moveRate)
+  camera.moveForward(-deltaY * moveRate)
+}
 
 function flyToSite(viewer: any, Cesium: any, site: DetectionSite) {
   viewer.camera.flyTo({
