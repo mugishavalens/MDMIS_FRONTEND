@@ -17,14 +17,22 @@ import {
   X,
   Maximize2,
   Minimize2,
+  Plus,
+  Trash2,
   type LucideIcon,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { StatusPill } from '@/components/shell/status-pill'
 import { MINERAL_META, fmtDateTime } from '@/lib/mdmis-data'
-import { fetchScanSessions, primaryZone, methodLabel, type ScanSession } from '@/lib/api/scans'
+import {
+  fetchScanSessions, createScanSession, createMineralZone, primaryZone, methodLabel,
+  SENSOR_TYPE_OPTIONS, SENSOR_METHOD_LABEL, MINERAL_OPTIONS, type ScanSession,
+} from '@/lib/api/scans'
 import { fetchSites, type Site } from '@/lib/api/sites'
+import { useAuth } from '@/lib/auth-context'
+import { can } from '@/lib/rbac'
+import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 const FALLBACK_MINERAL_COLOR = '#9b6dff'
@@ -69,37 +77,51 @@ function statusMeta(s: string) {
 }
 
 export function ScansView() {
+  const { user } = useAuth()
   const [sessions, setSessions] = useState<ScanSession[]>([])
   const [sites, setSites] = useState<Site[]>([])
   const [loading, setLoading] = useState(true)
   const [openId, setOpenId] = useState<string | null>(null)
+  const [showNewScan, setShowNewScan] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    Promise.all([fetchScanSessions(), fetchSites()])
-      .then(([s, sites]) => {
-        if (cancelled) return
-        setSessions(s)
-        setSites(sites)
-      })
-      .catch((err) => console.error('[MDMIS] Failed to load scans:', err))
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [])
+  async function loadScans() {
+    try {
+      const [s, sites] = await Promise.all([fetchScanSessions(), fetchSites()])
+      setSessions(s)
+      setSites(sites)
+    } catch (err) {
+      console.error('[MDMIS] Failed to load scans:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { loadScans() }, [])
 
   const siteName = (siteId: string) => sites.find((s) => s.id === siteId)?.name ?? siteId
   const openSession = openId ? sessions.find((s) => s.id === openId) ?? null : null
-
-  if (loading) {
-    return <p className="py-10 text-center text-xs text-muted-foreground">Loading scans…</p>
-  }
-
-  if (sessions.length === 0) {
-    return <p className="py-10 text-center text-xs text-muted-foreground">No scan sessions recorded yet.</p>
-  }
+  const canCreate = user ? can(user.role, 'scans.classify') : false
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      {canCreate && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setShowNewScan(true)}
+            className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <Plus className="size-3.5" /> New Scan
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <p className="py-10 text-center text-xs text-muted-foreground">Loading scans…</p>
+      ) : sessions.length === 0 ? (
+        <p className="py-10 text-center text-xs text-muted-foreground">No scan sessions recorded yet.</p>
+      ) : (
+      <div className="space-y-2">
       {sessions.map((s) => {
         const zone = primaryZone(s)
         const MethodIcon = sensorIcon(s.sensorTypes)
@@ -137,8 +159,19 @@ export function ScansView() {
           </button>
         )
       })}
+      </div>
+      )}
 
-      {openSession && <ScanClassificationModal session={openSession} siteName={siteName(openSession.siteId)} onClose={() => setOpenId(null)} />}
+      {openSession && (
+        <ScanClassificationModal session={openSession} siteName={siteName(openSession.siteId)} onClose={() => setOpenId(null)} />
+      )}
+      {showNewScan && (
+        <NewScanModal
+          sites={sites}
+          onClose={() => setShowNewScan(false)}
+          onCreated={() => { setShowNewScan(false); loadScans() }}
+        />
+      )}
     </div>
   )
 }
@@ -292,6 +325,210 @@ function ScanClassificationModal({
             </>
           )}
         </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+interface ZoneDraft {
+  mineral: string
+  confidence: string
+  gradePct: string
+  areaHa: string
+  flagged: boolean
+}
+
+const EMPTY_ZONE: ZoneDraft = { mineral: MINERAL_OPTIONS[0], confidence: '', gradePct: '', areaHa: '', flagged: false }
+
+function NewScanModal({
+  sites,
+  onClose,
+  onCreated,
+}: {
+  sites: Site[]
+  onClose: () => void
+  onCreated: () => void
+}) {
+  const [siteId, setSiteId] = useState(sites[0]?.id ?? '')
+  const [sensorType, setSensorType] = useState(SENSOR_TYPE_OPTIONS[0])
+  const [zones, setZones] = useState<ZoneDraft[]>([{ ...EMPTY_ZONE }])
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKeyDown)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [onClose])
+
+  function updateZone(i: number, patch: Partial<ZoneDraft>) {
+    setZones((prev) => prev.map((z, idx) => (idx === i ? { ...z, ...patch } : z)))
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!siteId) { setError('Select a site.'); return }
+    const validZones = zones.filter((z) => z.mineral && z.confidence !== '')
+    if (validZones.length === 0) { setError('Enter at least one zone with a mineral and confidence.'); return }
+
+    setSubmitting(true)
+    setError('')
+    try {
+      const session = await createScanSession({ site_id: siteId, sensor_types: [sensorType], status: 'complete' })
+      for (const z of validZones) {
+        await createMineralZone({
+          scan_session_id: session.id,
+          mineral_type: z.mineral,
+          confidence_score: Math.max(0, Math.min(100, Number(z.confidence) || 0)),
+          grade_pct: z.gradePct ? Number(z.gradePct) : undefined,
+          area_ha: z.areaHa ? Number(z.areaHa) : undefined,
+          flagged_anomaly: z.flagged,
+        })
+      }
+      onCreated()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to save scan.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const inputClass = 'h-8 rounded-md border border-border bg-background/60 px-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary'
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-4 backdrop-blur-[2px]"
+      onClick={onClose}
+    >
+      <Card
+        className="w-full max-w-lg border-border bg-card shadow-2xl max-h-[90vh] overflow-y-auto scrollbar-thin"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <CardHeader className="relative">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="absolute right-4 top-4 flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+          <CardTitle className="text-sm">New Scan</CardTitle>
+          <CardDescription>Record a confirmed field observation — grade and area come from what was measured, not a model.</CardDescription>
+        </CardHeader>
+        <form onSubmit={handleSubmit}>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block space-y-1 text-xs">
+                <span className="text-muted-foreground">Site</span>
+                <select
+                  value={siteId}
+                  onChange={(e) => setSiteId(e.target.value)}
+                  className={cn(inputClass, 'w-full')}
+                >
+                  {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </label>
+              <label className="block space-y-1 text-xs">
+                <span className="text-muted-foreground">Method</span>
+                <select
+                  value={sensorType}
+                  onChange={(e) => setSensorType(e.target.value)}
+                  className={cn(inputClass, 'w-full')}
+                >
+                  {SENSOR_TYPE_OPTIONS.map((t) => <option key={t} value={t}>{SENSOR_METHOD_LABEL[t]}</option>)}
+                </select>
+              </label>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-muted-foreground">Zones detected</p>
+                <button
+                  type="button"
+                  onClick={() => setZones((prev) => [...prev, { ...EMPTY_ZONE }])}
+                  className="flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  <Plus className="size-3" /> Add zone
+                </button>
+              </div>
+              {zones.map((z, i) => (
+                <div key={i} className="space-y-2 rounded-md border border-border bg-background/40 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Zone {i + 1}</span>
+                    {zones.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setZones((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={z.mineral}
+                      onChange={(e) => updateZone(i, { mineral: e.target.value })}
+                      className={inputClass}
+                    >
+                      {MINERAL_OPTIONS.map((m) => <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>)}
+                    </select>
+                    <input
+                      type="number" min={0} max={100} placeholder="Confidence %"
+                      value={z.confidence} onChange={(e) => updateZone(i, { confidence: e.target.value })}
+                      className={inputClass}
+                    />
+                    <input
+                      type="number" step="0.01" placeholder="Grade %"
+                      value={z.gradePct} onChange={(e) => updateZone(i, { gradePct: e.target.value })}
+                      className={inputClass}
+                    />
+                    <input
+                      type="number" step="0.1" placeholder="Area (ha)"
+                      value={z.areaHa} onChange={(e) => updateZone(i, { areaHa: e.target.value })}
+                      className={inputClass}
+                    />
+                  </div>
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox" checked={z.flagged}
+                      onChange={(e) => updateZone(i, { flagged: e.target.checked })}
+                    />
+                    Flag as anomaly
+                  </label>
+                </div>
+              ))}
+            </div>
+
+            {error && (
+              <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {error}
+              </p>
+            )}
+          </CardContent>
+          <div className="flex justify-end gap-2 border-t border-border p-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+            >
+              {submitting ? 'Saving…' : 'Save scan'}
+            </button>
+          </div>
+        </form>
       </Card>
     </div>
   )
