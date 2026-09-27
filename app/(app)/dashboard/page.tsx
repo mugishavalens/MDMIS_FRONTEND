@@ -4,6 +4,7 @@ import { DetectionCharts } from '@/components/dashboard/detection-charts'
 import { ActivityFeed } from '@/components/dashboard/activity-feed'
 import { RoleDashboard } from '@/components/dashboard/role-dashboard'
 import { PrioritySites } from '@/components/dashboard/priority-sites'
+import { DashboardSummaryProvider } from '@/lib/dashboard-context'
 
 export default function DashboardPage() {
   return (
@@ -15,13 +16,15 @@ export default function DashboardPage() {
           {/* Role-specific welcome banner */}
           <RoleDashboard />
 
-          <KpiCards />
-          <DetectionCharts />
+          <DashboardSummaryProvider>
+            <KpiCards />
+            <DetectionCharts />
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-            <ActivityFeed />
-            <PrioritySites />
-          </div>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
+              <ActivityFeed />
+              <PrioritySites />
+            </div>
+          </DashboardSummaryProvider>
         </div>
       </div>
     </>

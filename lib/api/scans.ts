@@ -53,6 +53,33 @@ export function fetchScanSessions(): Promise<ScanSession[]> {
   return apiFetch<ScanSession[]>('/scans/')
 }
 
+// Matches backend SENSOR_CHOICES / MINERAL_CHOICES (app/scans/models.py,
+// app/sites/models.py) — kept here rather than fetched so the "New Scan"
+// form always has options even before anything else has loaded.
+export const SENSOR_TYPE_OPTIONS = ['hyperspectral', 'gpr', 'em', 'magnetometer', 'gamma', 'satellite', 'lab']
+export const MINERAL_OPTIONS = [
+  'cassiterite', 'coltan', 'wolframite', 'gold', 'beryl', 'lithium', 'cobalt', 'copper', 'gemstone', 'unknown',
+]
+
+export function createScanSession(payload: {
+  site_id: string
+  sensor_types: string[]
+  status?: string
+}): Promise<ScanSession> {
+  return apiFetch<ScanSession>('/scans/', { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export function createMineralZone(payload: {
+  scan_session_id: string
+  mineral_type: string
+  confidence_score: number
+  grade_pct?: number
+  area_ha?: number
+  flagged_anomaly?: boolean
+}): Promise<MineralZone> {
+  return apiFetch<MineralZone>('/mineral-zones/', { method: 'POST', body: JSON.stringify(payload) })
+}
+
 /** The zone this session's classification card should headline — the one the model is most confident about. */
 export function primaryZone(session: ScanSession): MineralZone | null {
   if (session.zones.length === 0) return null
