@@ -53,6 +53,10 @@ export function fetchBatches(): Promise<Batch[]> {
   return apiFetch<Batch[]>('/traceability/')
 }
 
+export function fetchBatch(id: string): Promise<Batch> {
+  return apiFetch<Batch>(`/traceability/${id}`)
+}
+
 export function createCustodyEvent(payload: {
   batch_id: string
   event_type: CustodyStage

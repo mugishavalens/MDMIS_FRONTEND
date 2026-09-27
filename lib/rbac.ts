@@ -27,7 +27,7 @@ export const PERMISSIONS: Record<Role, string[]> = {
   ],
   mine_manager: [
     'dashboard.view', 'map.view', 'map.annotate', 'scans.view', 'scans.classify',
-    'traceability.view', 'traceability.edit', 'transport.view', 'compliance.view',
+    'traceability.view', 'traceability.edit', 'transport.view', 'transport.edit', 'compliance.view',
     'safety.view', 'safety.acknowledge',
   ],
   compliance_manager: [
@@ -36,7 +36,7 @@ export const PERMISSIONS: Record<Role, string[]> = {
   ],
   org_admin: [
     'dashboard.view', 'dashboard.admin', 'map.view', 'map.annotate', 'scans.view', 'scans.classify',
-    'traceability.view', 'traceability.edit', 'transport.view', 'compliance.view', 'compliance.submit',
+    'traceability.view', 'traceability.edit', 'transport.view', 'transport.edit', 'compliance.view', 'compliance.submit',
     'users.manage', 'users.invite', 'audit.view', 'safety.view', 'safety.acknowledge',
   ],
   system_admin: [
