@@ -326,7 +326,7 @@ export function CesiumExplorer() {
             </div>
 
             <div className="grid grid-cols-2 gap-2.5">
-              <Metric icon={Boxes} label="Primary mineral" value={selected.primaryMineral} sub={MINERAL_META[selected.primaryMineral].commodity} />
+              <Metric icon={Boxes} label="Primary mineral" value={selected.primaryMineral} sub={MINERAL_META[selected.primaryMineral]?.commodity ?? '—'} />
               <Metric icon={Gauge} label="Ore grade" value={`${selected.gradePct}%`} sub={`${selected.confidence}% AI conf.`} />
             </div>
 
