@@ -17,6 +17,7 @@ export interface RoleUser {
   role: Role
   roleLabel: string
   initials: string
+  avatarUrl?: string | null
 }
 
 // Permissions per role.

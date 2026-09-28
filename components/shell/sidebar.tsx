@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { useTheme } from '@/components/shell/theme-provider'
 import { useAuth } from '@/lib/auth-context'
 import { ROLE_NAV } from '@/lib/rbac'
+import { UserAvatar } from '@/components/shell/user-avatar'
 
 const ALL_NAV = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -52,9 +53,7 @@ export function Sidebar() {
       {user && (
         <div className="border-b border-sidebar-border px-4 py-3">
           <div className="flex items-center gap-2.5 rounded-lg bg-sidebar-accent/60 px-3 py-2">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
-              {user.initials}
-            </div>
+            <UserAvatar initials={user.initials} avatarUrl={user.avatarUrl} className="size-8 text-sm" />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-sidebar-foreground">{user.name}</p>
               <p className="truncate text-xs text-muted-foreground">{user.roleLabel}</p>

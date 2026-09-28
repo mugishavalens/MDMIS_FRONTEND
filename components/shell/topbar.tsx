@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, Bell, ChevronDown, Sun, Moon, LogOut, User, Settings, LayoutDashboard } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { PRICES } from '@/lib/mdmis-data'
 import { useTheme } from '@/components/shell/theme-provider'
 import { useAuth } from '@/lib/auth-context'
@@ -70,6 +70,7 @@ export function TopBar({ title, subtitle }: { title: string; subtitle: string })
           <button type="button" onClick={() => setMenuOpen((o) => !o)}
             className="flex items-center gap-2 rounded-md border border-border bg-secondary/60 py-1 pl-1 pr-2 transition-colors hover:border-primary/40">
             <Avatar className="size-7">
+              {user?.avatarUrl && <AvatarImage src={user.avatarUrl} alt="" className="object-cover" />}
               <AvatarFallback className="bg-primary text-xs font-semibold text-primary-foreground">{initials}</AvatarFallback>
             </Avatar>
             <div className="hidden leading-tight sm:block text-left">

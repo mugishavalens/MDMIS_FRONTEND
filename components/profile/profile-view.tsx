@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { User, Mail, Phone, Briefcase, Building2, MapPin, Hash, Camera, Save, X, KeyRound, Eye, EyeOff, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { ApiError, apiFetch } from '@/lib/api'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { UserAvatar } from '@/components/shell/user-avatar'
+import type { RoleUser } from '@/lib/rbac'
 
 export function ProfileView() {
   const { user } = useAuth()
@@ -92,37 +94,7 @@ export function ProfileView() {
         )}
       </div>
 
-      {/* Profile Photo */}
-      <div className="rounded-xl border border-border bg-card p-6">
-        <h3 className="text-sm font-semibold text-foreground mb-4">Profile Photo</h3>
-        <div className="flex items-center gap-6">
-          <div className="relative">
-            <div className="flex size-24 items-center justify-center rounded-full bg-primary text-primary-foreground text-2xl font-bold">
-              {user?.initials}
-            </div>
-            {isEditing && (
-              <button className="absolute bottom-0 right-0 flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground border-2 border-card hover:bg-primary/90 transition-colors">
-                <Camera className="size-4" />
-              </button>
-            )}
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-medium text-foreground">{formData.fullName}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{formData.email}</p>
-            {isEditing && (
-              <div className="mt-3 flex gap-2">
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Camera className="size-3.5" />
-                  Upload Photo
-                </Button>
-                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
-                  Remove
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <ProfilePhotoSection name={formData.fullName} email={formData.email} />
 
       {/* Personal Information */}
       <div className="rounded-xl border border-border bg-card p-6">
@@ -398,6 +370,121 @@ function ChangePasswordSection() {
           </div>
         </form>
       )}
+    </div>
+  )
+}
+
+const AVATAR_PX = 256
+const MAX_SOURCE_BYTES = 10 * 1024 * 1024
+
+/** Centre-crop to a square and downscale to a small JPEG data: URL. */
+async function toAvatarDataUrl(file: File): Promise<string> {
+  const url = URL.createObjectURL(file)
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image()
+      el.onload = () => resolve(el)
+      el.onerror = () => reject(new Error('Could not read that image.'))
+      el.src = url
+    })
+    const side = Math.min(img.naturalWidth, img.naturalHeight)
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = AVATAR_PX
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Could not process that image.')
+    ctx.drawImage(
+      img,
+      (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side,
+      0, 0, AVATAR_PX, AVATAR_PX,
+    )
+    return canvas.toDataURL('image/jpeg', 0.85)
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+function ProfilePhotoSection({ name, email }: { name: string; email: string }) {
+  const { user, updateUser } = useAuth()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-picking the same file
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Choose a JPEG, PNG or WebP image.')
+      return
+    }
+    if (file.size > MAX_SOURCE_BYTES) {
+      setError('That image is over 10 MB.')
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      const dataUrl = await toAvatarDataUrl(file)
+      const updated = await apiFetch<RoleUser>('/auth/me/avatar/', {
+        method: 'PUT',
+        body: JSON.stringify({ data_url: dataUrl }),
+      })
+      updateUser(updated)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Upload failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleRemove() {
+    setBusy(true)
+    setError('')
+    try {
+      updateUser(await apiFetch<RoleUser>('/auth/me/avatar/', { method: 'DELETE' }))
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not remove photo.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-6">
+      <h3 className="mb-4 text-sm font-semibold text-foreground">Profile Photo</h3>
+      <div className="flex items-center gap-6">
+        <div className="relative">
+          <UserAvatar initials={user?.initials ?? ''} avatarUrl={user?.avatarUrl} className="size-24 text-2xl" />
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={busy}
+            aria-label="Change profile photo"
+            className="absolute bottom-0 right-0 flex size-8 items-center justify-center rounded-full border-2 border-card bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+          >
+            <Camera className="size-4" />
+          </button>
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-medium text-foreground">{name}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{email}</p>
+          <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFile} />
+          <div className="mt-3 flex gap-2">
+            <Button variant="outline" size="sm" className="gap-2" disabled={busy} onClick={() => inputRef.current?.click()}>
+              <Camera className="size-3.5" />
+              {busy ? 'Saving…' : user?.avatarUrl ? 'Change Photo' : 'Upload Photo'}
+            </Button>
+            {user?.avatarUrl && (
+              <Button variant="ghost" size="sm" disabled={busy} onClick={handleRemove}
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive">
+                Remove
+              </Button>
+            )}
+          </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">JPEG, PNG or WebP. Cropped to a square automatically.</p>
+          {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+        </div>
+      </div>
     </div>
   )
 }

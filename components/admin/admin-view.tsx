@@ -9,6 +9,7 @@ import { PERMISSIONS, ROLE_THEME, type Role } from '@/lib/rbac'
 import { apiFetch, ApiError } from '@/lib/api'
 import { fetchAuditLogs, fetchAuditSummary, AUDIT_ACTION_LABEL, auditLevel, type AuditLog } from '@/lib/api/audit'
 import { timeAgo } from '@/lib/mdmis-data'
+import { UserAvatar } from '@/components/shell/user-avatar'
 
 interface OrgUser {
   name: string
@@ -17,6 +18,7 @@ interface OrgUser {
   roleLabel: string
   initials: string
   isActive: boolean
+  avatarUrl?: string | null
 }
 
 interface Invitation {
@@ -233,9 +235,7 @@ export function AdminView() {
               <CardContent className="space-y-3">
                 {users.map((u) => (
                   <div key={u.email} className="flex items-center gap-4 rounded-lg border border-border bg-background/40 px-4 py-3">
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                      {u.initials}
-                    </div>
+                    <UserAvatar initials={u.initials} avatarUrl={u.avatarUrl} className="size-9 text-xs" />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-foreground">{u.name}</p>
                       <p className="text-xs text-muted-foreground">{u.email}</p>
