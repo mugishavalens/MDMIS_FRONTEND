@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { User, Mail, Phone, Briefcase, Building2, MapPin, Hash, Camera, Save, X } from 'lucide-react'
+import { User, Mail, Phone, Briefcase, Building2, MapPin, Hash, Camera, Save, X, KeyRound, Eye, EyeOff, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
+import { ApiError, apiFetch } from '@/lib/api'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
@@ -282,6 +283,8 @@ export function ProfileView() {
         </div>
       </div>
 
+      <ChangePasswordSection />
+
       {/* Security Notice */}
       <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
         <div className="flex gap-3">
@@ -297,6 +300,104 @@ export function ProfileView() {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function ChangePasswordSection() {
+  const [open, setOpen] = useState(false)
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [show, setShow] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [done, setDone] = useState(false)
+
+  function reset() {
+    setCurrent(''); setNext(''); setConfirm(''); setError(''); setShow(false)
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (next.length < 8) { setError('New password must be at least 8 characters.'); return }
+    if (next !== confirm) { setError('New passwords do not match.'); return }
+    if (next === current) { setError('New password must be different from the current one.'); return }
+    setSaving(true)
+    setError('')
+    try {
+      await apiFetch('/auth/change-password/', {
+        method: 'POST',
+        body: JSON.stringify({ current_password: current, new_password: next }),
+      })
+      reset()
+      setOpen(false)
+      setDone(true)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to change password.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const type = show ? 'text' : 'password'
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <KeyRound className="size-4 text-primary" />
+            Password &amp; Security
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">Use at least 8 characters. You stay signed in on this device.</p>
+        </div>
+        {!open && (
+          <Button variant="outline" onClick={() => { setOpen(true); setDone(false) }} className="gap-2">
+            <KeyRound className="size-4" />
+            Change password
+          </Button>
+        )}
+      </div>
+
+      {done && !open && (
+        <p className="mt-4 flex items-center gap-2 text-xs text-[var(--success)]">
+          <CheckCircle2 className="size-4" /> Password changed. Use the new password next time you sign in.
+        </p>
+      )}
+
+      {open && (
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Current password</label>
+              <Input type={type} value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" autoFocus required />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">New password</label>
+              <Input type={type} value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" required />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Confirm new password</label>
+              <Input type={type} value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" required />
+            </div>
+          </div>
+          <button type="button" onClick={() => setShow(!show)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+            {show ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />} {show ? 'Hide' : 'Show'} passwords
+          </button>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <div className="flex gap-2">
+            <Button type="submit" disabled={saving} className="gap-2">
+              <Save className="size-4" />
+              {saving ? 'Saving…' : 'Update password'}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => { reset(); setOpen(false) }} className="gap-2">
+              <X className="size-4" />
+              Cancel
+            </Button>
+          </div>
+        </form>
+      )}
     </div>
   )
 }
