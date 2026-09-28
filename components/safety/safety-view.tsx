@@ -1,15 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   HardHat,
   AlertTriangle,
   AlertOctagon,
-  Clock,
-  CheckCircle2,
   MapPin,
   User,
   ShieldAlert,
+  type LucideIcon,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { StatusPill } from '@/components/shell/status-pill'
@@ -25,25 +24,18 @@ import {
 } from '@/lib/api/safety'
 import { fetchSites, type Site } from '@/lib/api/sites'
 import { fmtDateTime } from '@/lib/mdmis-data'
+import { cn } from '@/lib/utils'
+import { IncidentDrawer, riskTone, statusMeta } from '@/components/safety/incident-drawer'
 
-function statusMeta(s: IncidentStatus) {
-  switch (s) {
-    case 'resolved':
-      return { tone: 'success' as const, icon: CheckCircle2, label: 'Resolved' }
-    case 'acknowledged':
-      return { tone: 'info' as const, icon: Clock, label: 'Acknowledged' }
-    case 'escalated':
-      return { tone: 'danger' as const, icon: AlertOctagon, label: 'Escalated' }
-    default:
-      return { tone: 'danger' as const, icon: AlertTriangle, label: 'Open' }
-  }
-}
-
-function riskTone(score: number): 'danger' | 'warning' | 'success' {
-  if (score >= 70) return 'danger'
-  if (score >= 40) return 'warning'
-  return 'success'
-}
+type Filter = 'active' | IncidentStatus | 'all'
+const FILTERS: { key: Filter; label: string }[] = [
+  { key: 'active', label: 'Needs attention' },
+  { key: 'open', label: 'Open' },
+  { key: 'acknowledged', label: 'Acknowledged' },
+  { key: 'escalated', label: 'Escalated' },
+  { key: 'resolved', label: 'Resolved' },
+  { key: 'all', label: 'All' },
+]
 
 export function SafetyView() {
   const { user } = useAuth()
@@ -52,6 +44,8 @@ export function SafetyView() {
   const [loading, setLoading] = useState(true)
   const [acknowledgingId, setAcknowledgingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [filter, setFilter] = useState<Filter>('all')
 
   useEffect(() => {
     let cancelled = false
@@ -64,6 +58,12 @@ export function SafetyView() {
       .catch((err) => console.error('[MDMIS] Failed to load safety incidents:', err))
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
+  }, [])
+
+  const reloadIncidents = useCallback(() => {
+    fetchSafetyIncidents()
+      .then(setIncidents)
+      .catch((err) => console.error('[MDMIS] Failed to reload safety incidents:', err))
   }, [])
 
   const siteName = (siteId: string) => sites.find((s) => s.id === siteId)?.name ?? siteId
@@ -84,6 +84,9 @@ export function SafetyView() {
 
   const open = incidents.filter((i) => i.status === 'open').length
   const escalated = incidents.filter((i) => i.status === 'escalated').length
+  const visible = incidents.filter((i) =>
+    filter === 'all' ? true : filter === 'active' ? i.status !== 'resolved' : i.status === filter,
+  )
   const avgRisk = incidents.length > 0 ? Math.round(incidents.reduce((a, i) => a + i.riskScore, 0) / incidents.length) : 0
 
   return (
@@ -101,17 +104,44 @@ export function SafetyView() {
         </div>
       )}
 
+      <div className="flex flex-wrap gap-1.5">
+        {FILTERS.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => setFilter(f.key)}
+            className={cn(
+              'rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+              filter === f.key
+                ? 'border-primary/40 bg-primary/12 text-primary'
+                : 'border-border text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       {loading ? (
         <p className="py-10 text-center text-xs text-muted-foreground">Loading safety incidents…</p>
-      ) : incidents.length === 0 ? (
-        <p className="py-10 text-center text-xs text-muted-foreground">No safety incidents recorded.</p>
+      ) : visible.length === 0 ? (
+        <p className="py-10 text-center text-xs text-muted-foreground">
+          {incidents.length === 0 ? 'No safety incidents recorded.' : 'No incidents match this filter.'}
+        </p>
       ) : (
         <div className="space-y-2">
-          {incidents.map((i) => {
+          {visible.map((i) => {
             const st = statusMeta(i.status)
             const StatusIcon = st.icon
             return (
-              <Card key={i.id} className="border-border bg-card">
+              <Card
+                key={i.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setOpenId(i.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenId(i.id) } }}
+                className="cursor-pointer border-border bg-card transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              >
                 <CardContent className="flex flex-wrap items-start justify-between gap-3 p-4">
                   <div className="flex items-start gap-3">
                     <span
@@ -141,6 +171,7 @@ export function SafetyView() {
                       <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
                         <User className="size-3" /> reported by {i.reportedByName ?? 'Unknown'} · {fmtDateTime(i.created_at)}
                         {i.acknowledgedByName && ` · acknowledged by ${i.acknowledgedByName}`}
+                        {i.resolvedByName && ` · resolved by ${i.resolvedByName}`}
                       </p>
                     </div>
                   </div>
@@ -152,7 +183,7 @@ export function SafetyView() {
                     {i.status === 'open' && canAcknowledge && (
                       <button
                         type="button"
-                        onClick={() => handleAcknowledge(i.id)}
+                        onClick={(e) => { e.stopPropagation(); handleAcknowledge(i.id) }}
                         disabled={acknowledgingId === i.id}
                         className="rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
                       >
@@ -166,6 +197,16 @@ export function SafetyView() {
           })}
         </div>
       )}
+
+      {openId && (
+        <IncidentDrawer
+          incidentId={openId}
+          siteName={siteName}
+          canRespond={canAcknowledge}
+          onClose={() => setOpenId(null)}
+          onChanged={reloadIncidents}
+        />
+      )}
     </div>
   )
 }
@@ -176,7 +217,7 @@ function Summary({
   value,
   tone,
 }: {
-  icon: React.ElementType
+  icon: LucideIcon
   label: string
   value: string
   tone?: 'danger'
