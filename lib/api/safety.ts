@@ -14,6 +14,9 @@ export type IncidentStatus = 'open' | 'acknowledged' | 'resolved' | 'escalated'
 
 export interface SafetyIncident {
   id: string
+  /** Set when a sensor reading opened this incident automatically. */
+  sourceDeviceId?: string | null
+  sourceLabel?: string
   siteId: string
   zoneId: string | null
   incidentType: string

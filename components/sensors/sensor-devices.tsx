@@ -1,11 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Check, Copy, KeyRound, Plus, Power, Radio, X } from 'lucide-react'
+import { Check, ChevronRight, Copy, KeyRound, Plus, Power, Radio, X } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusPill } from '@/components/shell/status-pill'
 import { fmtWhen, inputClass } from '@/components/sensors/format'
 import { FilterChips, FilterSelect } from '@/components/sensors/filters'
+import { DeviceDetailDrawer } from '@/components/sensors/detail-drawers'
 import { API_URL, ApiError } from '@/lib/api'
 import type { Site } from '@/lib/api/sites'
 import {
@@ -42,6 +43,7 @@ export function DevicesPanel({
   const [newKey, setNewKey] = useState<SensorDeviceWithKey | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [openId, setOpenId] = useState<string | null>(null)
   const [kindF, setKindF] = useState<'all' | 'live' | 'survey'>('all')
   const [statusF, setStatusF] = useState<'all' | 'Online' | 'Offline' | 'Standby' | 'Deactivated'>('all')
   const [siteF, setSiteF] = useState('')
@@ -90,8 +92,22 @@ export function DevicesPanel({
     })
   }
 
+  const openDevice = devices.find((d) => d.id === openId)
+
   return (
     <div className="space-y-4">
+      {openDevice && (
+        <DeviceDetailDrawer
+          device={openDevice}
+          status={deviceStatus(openDevice)}
+          siteName={siteName}
+          canManage={canManage}
+          busy={busy}
+          onRotate={() => act(async () => { setNewKey(await rotateDeviceKey(openDevice.id)); setOpenId(null) })}
+          onToggleActive={() => act(() => setDeviceActive(openDevice.id, !openDevice.isActive))}
+          onClose={() => setOpenId(null)}
+        />
+      )}
       {newKey && <KeyReveal device={newKey} onClose={() => setNewKey(null)} />}
 
       <Card className="border-border bg-card">
@@ -163,8 +179,23 @@ export function DevicesPanel({
               {visibleDevices.map((d) => {
                 const st = deviceStatus(d)
                 const values = Object.entries(d.lastValues ?? {}).slice(0, 5)
+                const hover = [
+                  d.name,
+                  `${st.label} · ${SENSOR_LABEL[d.sensorType] ?? d.sensorType} · ${siteName(d.siteId)}`,
+                  isLiveSensor(d.sensorType) ? 'Live sensor: sends readings continuously' : 'Survey device: sends a file after each survey',
+                  `Last data ${fmtWhen(d.lastSeenAt)}`,
+                  'Click for full details',
+                ].join('\n')
                 return (
-                  <li key={d.id} className="flex flex-wrap items-center gap-3 py-3">
+                  <li
+                    key={d.id}
+                    role="button"
+                    tabIndex={0}
+                    title={hover}
+                    onClick={() => setOpenId(d.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenId(d.id) } }}
+                    className="-mx-2 flex cursor-pointer flex-wrap items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  >
                     <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-md',
                       d.online ? 'bg-[var(--success)]/12 text-[var(--success)]' : 'bg-secondary/70 text-muted-foreground')}>
                       <Radio className="size-4" />
@@ -192,7 +223,7 @@ export function DevicesPanel({
                       <p className="mt-1">Last data {fmtWhen(d.lastSeenAt)}</p>
                     </div>
                     {canManage && (
-                      <div className="flex gap-1">
+                      <div className="flex gap-1" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                         <button type="button" title="Rotate API key" disabled={busy}
                           onClick={() => act(async () => setNewKey(await rotateDeviceKey(d.id)))}
                           className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-50">
@@ -206,6 +237,7 @@ export function DevicesPanel({
                         </button>
                       </div>
                     )}
+                    <ChevronRight className="size-4 text-muted-foreground" />
                   </li>
                 )
               })}

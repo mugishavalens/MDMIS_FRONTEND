@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  AlertTriangle, CheckCircle2, ChevronDown, Cpu, Download, FileUp, Gauge, ListChecks, Radio, Upload, User, XCircle,
-  type LucideIcon,
+  AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Cpu, Download, FileUp, Gauge, ListChecks, Plus, Radio, Upload,
+  User, X, XCircle, type LucideIcon,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusPill } from '@/components/shell/status-pill'
+import { FileDetailDrawer } from '@/components/sensors/detail-drawers'
 import { fmtBytes, fmtWhen, inputClass } from '@/components/sensors/format'
 import { FilterChips, FilterSelect } from '@/components/sensors/filters'
 import { DevicesPanel, LiveReadingsPanel, RulesPanel } from '@/components/sensors/sensor-devices'
@@ -202,17 +203,30 @@ function UploadsPanel({
   const sitesPresent = [...new Set(files.map((f) => f.siteId))]
 
   const manual = method === 'manual'
+  const [showUpload, setShowUpload] = useState(false)
+  const [openFile, setOpenFile] = useState<SensorFile | null>(null)
+
   const log = (
     <Card className="border-border bg-card">
-      <CardHeader>
-        <CardTitle className="text-sm">{manual ? 'Manual upload log' : 'Files pushed by devices'}</CardTitle>
-        <CardDescription>
-          {manual
-            ? 'Every file uploaded by a person, including rejected ones — kept permanently.'
-            : 'Survey files sent automatically by registered devices (e.g. a drone after each flight).'}
-        </CardDescription>
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
+        <div>
+          <CardTitle className="text-sm">{manual ? 'Manual upload log' : 'Files pushed by devices'}</CardTitle>
+          <CardDescription>
+            {manual
+              ? 'Every file uploaded by a person, including rejected ones — kept permanently. Click a file for full details.'
+              : 'Survey files sent automatically by registered devices (e.g. a drone after each flight). Click a file for full details.'}
+          </CardDescription>
+        </div>
+        {manual && canUpload && !showUpload && (
+          <button type="button" onClick={() => setShowUpload(true)} className="flex items-center gap-1 text-xs text-primary hover:underline">
+            <Plus className="size-3.5" /> Upload file
+          </button>
+        )}
       </CardHeader>
       <CardContent className="space-y-3">
+        {manual && showUpload && (
+          <UploadForm sites={sites} onUploaded={load} onClose={() => setShowUpload(false)} />
+        )}
         {files.length > 0 && (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-border bg-background/40 p-2">
             <FilterChips
@@ -241,31 +255,22 @@ function UploadsPanel({
           <p className="py-8 text-center text-xs text-muted-foreground">No files match these filters.</p>
         ) : (
           <ul className="divide-y divide-border">
-            {visible.map((f) => <LogRow key={f.id} f={f} siteName={siteName} />)}
+            {visible.map((f) => <LogRow key={f.id} f={f} siteName={siteName} onOpen={() => setOpenFile(f)} />)}
           </ul>
         )}
       </CardContent>
     </Card>
   )
 
-  if (!manual) return log
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[380px_1fr]">
-      {canUpload ? (
-        <UploadForm sites={sites} onUploaded={load} />
-      ) : (
-        <Card className="border-border bg-card">
-          <CardContent className="p-5 text-xs text-muted-foreground">
-            Your role can view the upload log but not upload sensor files.
-          </CardContent>
-        </Card>
-      )}
+    <>
       {log}
-    </div>
+      {openFile && <FileDetailDrawer file={openFile} siteName={siteName} onClose={() => setOpenFile(null)} />}
+    </>
   )
 }
 
-function UploadForm({ sites, onUploaded }: { sites: Site[]; onUploaded: () => void }) {
+function UploadForm({ sites, onUploaded, onClose }: { sites: Site[]; onUploaded: () => void; onClose: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [siteId, setSiteId] = useState('')
   const [sensorType, setSensorType] = useState<(typeof FILE_SENSOR_TYPES)[number]>('hyperspectral')
@@ -309,12 +314,18 @@ function UploadForm({ sites, onUploaded }: { sites: Site[]; onUploaded: () => vo
   }
 
   return (
-    <Card className="border-border bg-card">
-      <CardHeader>
-        <CardTitle className="text-sm">Upload sensor data</CardTitle>
-        <CardDescription>Files are checked immediately; valid ones join a scan session for processing.</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <div className="rounded-md border border-primary/40 bg-background/40 p-4">
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Upload sensor data</p>
+          <p className="text-xs text-muted-foreground">Files are checked immediately; valid ones join a scan session for processing.</p>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close upload"
+          className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground">
+          <X className="size-4" />
+        </button>
+      </div>
+      <div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <label className="block space-y-1 text-xs">
             <span className="text-muted-foreground">Site</span>
@@ -390,8 +401,8 @@ function UploadForm({ sites, onUploaded }: { sites: Site[]; onUploaded: () => vo
             {result.errors.length > 0 ? <IssueList issues={result.errors} /> : <p className="text-destructive">{result.message}</p>}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }
 
@@ -428,9 +439,17 @@ function FileFacts({ f }: { f: SensorFile }) {
   )
 }
 
-function LogRow({ f, siteName }: { f: SensorFile; siteName: (id: string) => string }) {
-  const [open, setOpen] = useState(false)
+function LogRow({ f, siteName, onOpen }: { f: SensorFile; siteName: (id: string) => string; onOpen: () => void }) {
   const [downloading, setDownloading] = useState(false)
+  const sensor = SENSOR_LABEL[f.sensorType as keyof typeof SENSOR_LABEL] ?? f.sensorType
+  const hover = [
+    f.originalFilename,
+    `${f.status === 'validated' ? 'Accepted' : 'Rejected'} · ${sensor} · ${siteName(f.siteId)}`,
+    f.uploadMethod === 'api' ? `Pushed by device ${f.deviceName ?? ''}` : `Uploaded by ${f.uploadedByName ?? 'a user'}`,
+    `${fmtBytes(f.sizeBytes)} · ${fmtWhen(f.created_at)}`,
+    f.status === 'rejected' && f.errors[0] ? `Reason: ${f.errors[0].message}` : '',
+    'Click for full details',
+  ].filter(Boolean).join('\n')
 
   async function download() {
     setDownloading(true)
@@ -444,14 +463,24 @@ function LogRow({ f, siteName }: { f: SensorFile; siteName: (id: string) => stri
   }
 
   return (
-    <li className="py-2.5">
+    <li
+      role="button"
+      tabIndex={0}
+      title={hover}
+      onClick={onOpen}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() } }}
+      className="-mx-2 cursor-pointer rounded-md px-2 py-2.5 transition-colors hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+    >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <button type="button" onClick={() => setOpen(!open)} className="min-w-0 flex-1 text-left">
+        <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-medium text-foreground">{f.originalFilename}</p>
           <p className="truncate text-[11px] text-muted-foreground">
-            {SENSOR_LABEL[f.sensorType as keyof typeof SENSOR_LABEL] ?? f.sensorType} · {siteName(f.siteId)} · {fmtBytes(f.sizeBytes)} · {fmtWhen(f.created_at)}
+            {sensor} · {siteName(f.siteId)} · {fmtBytes(f.sizeBytes)} · {fmtWhen(f.created_at)}
           </p>
-        </button>
+          {f.status === 'rejected' && f.errors[0] && (
+            <p className="truncate text-[11px] text-destructive">{f.errors[0].message}</p>
+          )}
+        </div>
         <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <span className={cn('rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide',
             f.uploadMethod === 'api' ? 'bg-accent/15 text-accent' : 'bg-primary/15 text-primary')}>
@@ -461,21 +490,17 @@ function LogRow({ f, siteName }: { f: SensorFile; siteName: (id: string) => stri
             ? <><Radio className="size-3" /> {f.deviceName ?? 'device'}</>
             : <><User className="size-3" /> {f.uploadedByName ?? 'user'}</>}
         </span>
-        <StatusPill tone={f.status === 'validated' ? 'success' : 'danger'}>{f.status}</StatusPill>
-        {f.status === 'validated' && (
-          <button type="button" onClick={download} disabled={downloading} title="Download (link valid 15 min)"
+        <StatusPill tone={f.status === 'validated' ? 'success' : 'danger'}>{f.status === 'validated' ? 'Accepted' : 'Rejected'}</StatusPill>
+        {f.status === 'validated' ? (
+          <button type="button" onClick={(e) => { e.stopPropagation(); download() }} disabled={downloading} title="Download (link valid 15 min)"
             className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-50">
             <Download className="size-3.5" />
           </button>
+        ) : (
+          <span className="size-7" />
         )}
+        <ChevronRight className="size-4 text-muted-foreground" />
       </div>
-      {open && (
-        <div className="mt-2 space-y-1 rounded-md border border-border bg-background/40 p-2.5 text-[11px]">
-          {f.status === 'rejected' ? <IssueList issues={f.errors} /> : <FileFacts f={f} />}
-          <p className="font-mono text-muted-foreground">sha256 {f.sha256.slice(0, 16)}…</p>
-          {f.scanSessionId && <p className="text-muted-foreground">Scan session <span className="font-mono">{f.scanSessionId.slice(0, 8)}</span></p>}
-        </div>
-      )}
     </li>
   )
 }

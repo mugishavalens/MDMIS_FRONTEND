@@ -58,6 +58,7 @@ export interface SensorFile {
   warnings: string[]
   uploadMethod: 'manual' | 'api'
   uploadedByName: string | null
+  deviceId: string | null
   deviceName: string | null
   created_at: string
 }
