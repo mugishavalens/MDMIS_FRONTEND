@@ -8,113 +8,247 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusPill } from '@/components/shell/status-pill'
 import { fmtBytes, fmtWhen, inputClass } from '@/components/sensors/format'
+import { FilterChips, FilterSelect } from '@/components/sensors/filters'
 import { DevicesPanel, LiveReadingsPanel, RulesPanel } from '@/components/sensors/sensor-devices'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { can } from '@/lib/rbac'
 import { fetchSites, type Site } from '@/lib/api/sites'
 import {
-  FILE_SENSOR_TYPES, SENSOR_ACCEPT, SENSOR_LABEL, fetchSensorFiles, sensorFileDownloadUrl, uploadSensorFile,
+  FILE_SENSOR_TYPES, SENSOR_ACCEPT, SENSOR_LABEL, fetchDevices, fetchSensorFiles, isLiveSensor, sensorFileDownloadUrl,
+  uploadSensorFile,
   type SensorFile, type ValidationIssue,
 } from '@/lib/api/sensors'
 import { cn } from '@/lib/utils'
 
-type Tab = 'uploads' | 'devices' | 'live' | 'rules'
+type Path = 'manual' | 'direct'
+type DirectTab = 'devices' | 'live' | 'files' | 'rules'
 
-const TABS: { key: Tab; label: string; icon: LucideIcon }[] = [
-  { key: 'uploads', label: 'Uploads & log', icon: FileUp },
+const DIRECT_TABS: { key: DirectTab; label: string; icon: LucideIcon }[] = [
   { key: 'devices', label: 'Devices', icon: Cpu },
   { key: 'live', label: 'Live readings', icon: Gauge },
+  { key: 'files', label: 'Files pushed by devices', icon: FileUp },
   { key: 'rules', label: 'Alert rules', icon: ListChecks },
 ]
+
+const PATHS: Record<Path, { n: number; icon: LucideIcon; title: string; who: string; text: string; banner: string }> = {
+  manual: {
+    n: 1, icon: Upload, title: 'Manual upload', who: 'A person, from the web app',
+    text: 'Someone on the team uploads survey files after fieldwork — GeoTIFF, HDF5, SEG-Y, CSV…',
+    banner: 'Files come in when a team member uploads them here. Each one is checked, stored and added to a scan session.',
+  },
+  direct: {
+    n: 2, icon: Radio, title: 'Direct from sensors', who: 'A device, automatically',
+    text: 'Registered sensors send data on their own using an API key — live readings or survey files, no person involved.',
+    banner: 'Data arrives automatically from registered devices. Live readings are checked against the alert rules as they arrive.',
+  },
+}
 
 export function SensorsView() {
   const { user } = useAuth()
   const canUpload = user ? can(user.role, 'sensors.upload') : false
   const canManage = user ? can(user.role, 'sensors.manage') : false
-  const [tab, setTab] = useState<Tab>('uploads')
+  const [path, setPath] = useState<Path>('manual')
+  const [directTab, setDirectTab] = useState<DirectTab>('devices')
   const [sites, setSites] = useState<Site[]>([])
+
+  const [stats, setStats] = useState<Record<Path, string> | null>(null)
 
   useEffect(() => {
     fetchSites().then(setSites).catch((err) => console.error('[MDMIS] Failed to load sites:', err))
+    Promise.all([fetchSensorFiles(), fetchDevices()])
+      .then(([files, devices]) => {
+        const manual = files.filter((f) => f.uploadMethod === 'manual')
+        const rejected = manual.filter((f) => f.status === 'rejected').length
+        const live = devices.filter((d) => d.isActive && isLiveSensor(d.sensorType))
+        const pushed = files.filter((f) => f.uploadMethod === 'api').length
+        setStats({
+          manual: `${manual.length} file${manual.length === 1 ? '' : 's'} uploaded · ${rejected} rejected`,
+          direct: `${devices.length} device${devices.length === 1 ? '' : 's'} · ${live.filter((d) => d.online).length} of ${live.length} live sensors online · ${pushed} file${pushed === 1 ? '' : 's'} pushed`,
+        })
+      })
+      .catch(() => {})
   }, [])
 
   const siteName = useCallback((id: string) => sites.find((s) => s.id === id)?.name ?? id, [sites])
+  const active = PATHS[path]
+  const ActiveIcon = active.icon
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <PathCard
-          icon={Upload}
-          title="Path 1 · Manual upload"
-          text="A team member uploads survey files (GeoTIFF, HDF5, SEG-Y, CSV…) from the web app."
-        />
-        <PathCard
-          icon={Radio}
-          title="Path 2 · Direct from sensors"
-          text="Registered devices push live readings or survey files straight into MDMIS with their own API key."
-        />
+      <div>
+        <p className="mb-2 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+          How is the data getting in? Choose a path
+        </p>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2" role="tablist" aria-label="Ingestion path">
+          {(Object.keys(PATHS) as Path[]).map((key) => (
+            <PathCard key={key} path={key} selected={path === key} stat={stats?.[key]} onSelect={() => setPath(key)} />
+          ))}
+        </div>
       </div>
 
-      <div className="inline-flex flex-wrap rounded-lg border border-border bg-card p-1">
-        {TABS.map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setTab(key)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-              tab === key ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <Icon className="size-3.5" /> {label}
-          </button>
-        ))}
+      <div className="flex items-start gap-3 rounded-lg border border-primary/40 bg-primary/8 px-4 py-3">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+          <ActiveIcon className="size-4" />
+        </span>
+        <div>
+          <p className="text-sm font-semibold text-foreground">
+            You are in Path {active.n} · {active.title}
+          </p>
+          <p className="text-xs text-muted-foreground">{active.banner}</p>
+        </div>
       </div>
 
-      {tab === 'uploads' && <UploadsPanel sites={sites} siteName={siteName} canUpload={canUpload} />}
-      {tab === 'devices' && <DevicesPanel sites={sites} siteName={siteName} canManage={canManage} />}
-      {tab === 'live' && <LiveReadingsPanel siteName={siteName} />}
-      {tab === 'rules' && <RulesPanel canEdit={canManage} siteName={siteName} />}
+      {path === 'manual' && (
+        <UploadsPanel sites={sites} siteName={siteName} canUpload={canUpload} method="manual" />
+      )}
+
+      {path === 'direct' && (
+        <>
+          <div className="inline-flex flex-wrap rounded-lg border border-border bg-card p-1">
+            {DIRECT_TABS.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setDirectTab(key)}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                  directTab === key ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Icon className="size-3.5" /> {label}
+              </button>
+            ))}
+          </div>
+          {directTab === 'devices' && <DevicesPanel sites={sites} siteName={siteName} canManage={canManage} />}
+          {directTab === 'live' && <LiveReadingsPanel siteName={siteName} />}
+          {directTab === 'files' && <UploadsPanel sites={sites} siteName={siteName} canUpload={false} method="api" />}
+          {directTab === 'rules' && <RulesPanel canEdit={canManage} siteName={siteName} />}
+        </>
+      )}
     </div>
   )
 }
 
-function PathCard({ icon: Icon, title, text }: { icon: LucideIcon; title: string; text: string }) {
+function PathCard({ path, selected, stat, onSelect }: { path: Path; selected: boolean; stat?: string; onSelect: () => void }) {
+  const { n, icon: Icon, title, who, text } = PATHS[path]
   return (
-    <div className="flex gap-3 rounded-lg border border-border bg-card p-4">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/12 text-primary">
-        <Icon className="size-4" />
+    <button
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      onClick={onSelect}
+      className={cn(
+        'relative flex gap-3 rounded-lg border p-4 text-left transition-colors',
+        selected
+          ? 'border-primary bg-primary/8 ring-1 ring-primary'
+          : 'border-border bg-card opacity-80 hover:border-primary/40 hover:opacity-100',
+      )}
+    >
+      <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-md',
+        selected ? 'bg-primary text-primary-foreground' : 'bg-primary/12 text-primary')}>
+        <Icon className="size-5" />
       </span>
-      <div>
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">{text}</p>
+      <div className="min-w-0">
+        <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
+          <span className={cn('rounded px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide',
+            selected ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground')}>
+            Path {n}
+          </span>
+          {title}
+        </p>
+        <p className="mt-0.5 text-[11px] font-medium text-foreground/80">{who}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{text}</p>
+        {stat && <p className="mt-2 font-mono text-[11px] text-foreground">{stat}</p>}
       </div>
-    </div>
+      {selected && (
+        <span className="absolute right-3 top-3 flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-primary">
+          <CheckCircle2 className="size-3.5" /> Selected
+        </span>
+      )}
+    </button>
   )
 }
 
 // ---- Uploads -----------------------------------------------------------------------
 
 function UploadsPanel({
-  sites, siteName, canUpload,
+  sites, siteName, canUpload, method,
 }: {
   sites: Site[]
   siteName: (id: string) => string
   canUpload: boolean
+  method: 'manual' | 'api'
 }) {
   const [files, setFiles] = useState<SensorFile[]>([])
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(() => {
     fetchSensorFiles()
-      .then(setFiles)
+      .then((all) => setFiles(all.filter((f) => f.uploadMethod === method)))
       .catch((err) => console.error('[MDMIS] Failed to load sensor files:', err))
       .finally(() => setLoading(false))
-  }, [])
+  }, [method])
 
   useEffect(() => { load() }, [load])
 
+  const [statusF, setStatusF] = useState<'all' | 'validated' | 'rejected'>('all')
+  const [sensorF, setSensorF] = useState('')
+  const [siteF, setSiteF] = useState('')
+  const visible = files.filter((f) =>
+    (statusF === 'all' || f.status === statusF) && (!sensorF || f.sensorType === sensorF) && (!siteF || f.siteId === siteF),
+  )
+  const sensorsPresent = [...new Set(files.map((f) => f.sensorType))]
+  const sitesPresent = [...new Set(files.map((f) => f.siteId))]
+
+  const manual = method === 'manual'
+  const log = (
+    <Card className="border-border bg-card">
+      <CardHeader>
+        <CardTitle className="text-sm">{manual ? 'Manual upload log' : 'Files pushed by devices'}</CardTitle>
+        <CardDescription>
+          {manual
+            ? 'Every file uploaded by a person, including rejected ones — kept permanently.'
+            : 'Survey files sent automatically by registered devices (e.g. a drone after each flight).'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {files.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-border bg-background/40 p-2">
+            <FilterChips
+              label="Status"
+              value={statusF}
+              onChange={setStatusF}
+              options={[
+                { key: 'all', label: 'All', count: files.length },
+                { key: 'validated', label: 'Accepted', count: files.filter((f) => f.status === 'validated').length },
+                { key: 'rejected', label: 'Rejected', count: files.filter((f) => f.status === 'rejected').length },
+              ]}
+            />
+            <FilterSelect value={sensorF} onChange={setSensorF} allLabel="All sensors"
+              options={sensorsPresent.map((s) => ({ value: s, label: SENSOR_LABEL[s as keyof typeof SENSOR_LABEL] ?? s }))} />
+            <FilterSelect value={siteF} onChange={setSiteF} allLabel="All sites"
+              options={sitesPresent.map((s) => ({ value: s, label: siteName(s) }))} />
+          </div>
+        )}
+        {loading ? (
+          <p className="py-8 text-center text-xs text-muted-foreground">Loading…</p>
+        ) : files.length === 0 ? (
+          <p className="py-8 text-center text-xs text-muted-foreground">
+            {manual ? 'No files uploaded yet.' : 'No device has pushed a file yet.'}
+          </p>
+        ) : visible.length === 0 ? (
+          <p className="py-8 text-center text-xs text-muted-foreground">No files match these filters.</p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {visible.map((f) => <LogRow key={f.id} f={f} siteName={siteName} />)}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  )
+
+  if (!manual) return log
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[380px_1fr]">
       {canUpload ? (
@@ -122,27 +256,11 @@ function UploadsPanel({
       ) : (
         <Card className="border-border bg-card">
           <CardContent className="p-5 text-xs text-muted-foreground">
-            Your role can view the ingestion log but not upload sensor files.
+            Your role can view the upload log but not upload sensor files.
           </CardContent>
         </Card>
       )}
-      <Card className="border-border bg-card">
-        <CardHeader>
-          <CardTitle className="text-sm">Ingestion log</CardTitle>
-          <CardDescription>Every upload, from people and devices, including rejected files — kept permanently.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <p className="py-8 text-center text-xs text-muted-foreground">Loading…</p>
-          ) : files.length === 0 ? (
-            <p className="py-8 text-center text-xs text-muted-foreground">No sensor data uploaded yet.</p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {files.map((f) => <LogRow key={f.id} f={f} siteName={siteName} />)}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      {log}
     </div>
   )
 }
@@ -334,7 +452,11 @@ function LogRow({ f, siteName }: { f: SensorFile; siteName: (id: string) => stri
             {SENSOR_LABEL[f.sensorType as keyof typeof SENSOR_LABEL] ?? f.sensorType} · {siteName(f.siteId)} · {fmtBytes(f.sizeBytes)} · {fmtWhen(f.created_at)}
           </p>
         </button>
-        <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className={cn('rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide',
+            f.uploadMethod === 'api' ? 'bg-accent/15 text-accent' : 'bg-primary/15 text-primary')}>
+            {f.uploadMethod === 'api' ? 'Path 2 · Device' : 'Path 1 · Manual'}
+          </span>
           {f.uploadMethod === 'api'
             ? <><Radio className="size-3" /> {f.deviceName ?? 'device'}</>
             : <><User className="size-3" /> {f.uploadedByName ?? 'user'}</>}

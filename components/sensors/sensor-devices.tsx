@@ -5,6 +5,7 @@ import { Check, Copy, KeyRound, Plus, Power, Radio, X } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusPill } from '@/components/shell/status-pill'
 import { fmtWhen, inputClass } from '@/components/sensors/format'
+import { FilterChips, FilterSelect } from '@/components/sensors/filters'
 import { API_URL, ApiError } from '@/lib/api'
 import type { Site } from '@/lib/api/sites'
 import {
@@ -18,8 +19,10 @@ const LIVE_REFRESH_MS = 10_000
 
 function deviceStatus(d: SensorDevice) {
   if (!d.isActive) return { tone: 'neutral' as const, label: 'Deactivated' }
-  if (d.online) return { tone: 'success' as const, label: 'Online' }
+  if (d.online) return { tone: 'success' as const, label: isLiveSensor(d.sensorType) ? 'Online' : 'Uploading' }
   if (!d.lastSeenAt) return { tone: 'warning' as const, label: 'Never connected' }
+  // Survey devices (drones, rovers) upload after each survey; quiet between surveys is normal.
+  if (!isLiveSensor(d.sensorType)) return { tone: 'info' as const, label: 'Standby' }
   return { tone: 'danger' as const, label: 'Offline' }
 }
 
@@ -39,6 +42,15 @@ export function DevicesPanel({
   const [newKey, setNewKey] = useState<SensorDeviceWithKey | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [kindF, setKindF] = useState<'all' | 'live' | 'survey'>('all')
+  const [statusF, setStatusF] = useState<'all' | 'Online' | 'Offline' | 'Standby' | 'Deactivated'>('all')
+  const [siteF, setSiteF] = useState('')
+
+  const visibleDevices = devices.filter((d) =>
+    (kindF === 'all' || (kindF === 'live') === isLiveSensor(d.sensorType))
+    && (statusF === 'all' || deviceStatus(d).label === statusF)
+    && (!siteF || d.siteId === siteF),
+  )
 
   const load = useCallback(() => {
     fetchDevices()
@@ -113,13 +125,42 @@ export function DevicesPanel({
           )}
           {error && <p className="text-xs text-destructive">{error}</p>}
 
+          {devices.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-border bg-background/40 p-2">
+              <FilterChips
+                label="Kind"
+                value={kindF}
+                onChange={setKindF}
+                options={[
+                  { key: 'all', label: 'All', count: devices.length },
+                  { key: 'live', label: 'Live sensors', count: devices.filter((d) => isLiveSensor(d.sensorType)).length },
+                  { key: 'survey', label: 'Survey devices', count: devices.filter((d) => !isLiveSensor(d.sensorType)).length },
+                ]}
+              />
+              <FilterChips
+                label="Status"
+                value={statusF}
+                onChange={setStatusF}
+                options={(['all', 'Online', 'Offline', 'Standby', 'Deactivated'] as const).map((k) => ({
+                  key: k,
+                  label: k === 'all' ? 'Any' : k,
+                  count: k === 'all' ? undefined : devices.filter((d) => deviceStatus(d).label === k).length,
+                }))}
+              />
+              <FilterSelect value={siteF} onChange={setSiteF} allLabel="All sites"
+                options={[...new Set(devices.map((d) => d.siteId))].map((s) => ({ value: s, label: siteName(s) }))} />
+            </div>
+          )}
+
           {loading ? (
             <p className="py-6 text-center text-xs text-muted-foreground">Loading…</p>
           ) : devices.length === 0 ? (
             <p className="py-6 text-center text-xs text-muted-foreground">No devices registered yet.</p>
+          ) : visibleDevices.length === 0 ? (
+            <p className="py-6 text-center text-xs text-muted-foreground">No devices match these filters.</p>
           ) : (
             <ul className="divide-y divide-border">
-              {devices.map((d) => {
+              {visibleDevices.map((d) => {
                 const st = deviceStatus(d)
                 const values = Object.entries(d.lastValues ?? {}).slice(0, 5)
                 return (
