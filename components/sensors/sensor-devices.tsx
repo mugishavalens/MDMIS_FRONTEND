@@ -1,7 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Check, ChevronRight, Copy, KeyRound, Plus, Power, Radio, X } from 'lucide-react'
+import {
+  Check, ChevronRight, Copy, KeyRound, Plus, Power, X,
+} from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusPill } from '@/components/shell/status-pill'
 import { fmtWhen, inputClass } from '@/components/sensors/format'
@@ -196,21 +198,17 @@ export function DevicesPanel({
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenId(d.id) } }}
                     className="-mx-2 flex cursor-pointer flex-wrap items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                   >
-                    <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-md',
-                      d.online ? 'bg-[var(--success)]/12 text-[var(--success)]' : 'bg-secondary/70 text-muted-foreground')}>
-                      <Radio className="size-4" />
-                    </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold text-foreground">{d.name}</p>
+                      <p className="text-sm font-semibold text-foreground">{d.name}</p>
                       <p className="text-[11px] text-muted-foreground">
-                        {SENSOR_LABEL[d.sensorType] ?? d.sensorType} · {siteName(d.siteId)} · key <span className="font-mono">{d.apiKeyPrefix}…</span>
+                        {SENSOR_LABEL[d.sensorType] ?? d.sensorType} · {siteName(d.siteId)}
                       </p>
                       {values.length > 0 && (
                         <p className="mt-1 flex flex-wrap gap-1.5">
                           {values.map(([k, v]) => {
                             const m = metricMeta(k)
                             return (
-                              <span key={k} className="rounded bg-secondary/70 px-1.5 py-0.5 font-mono text-[10px] text-foreground">
+                              <span key={k} className="rounded bg-secondary/70 px-1.5 py-0.5 text-[11px] tabular-nums text-foreground">
                                 {m.label} {v}{m.unit && ` ${m.unit}`}
                               </span>
                             )
@@ -397,12 +395,12 @@ export function LiveReadingsPanel({ siteName }: { siteName: (id: string) => stri
               return (
                 <div key={s.key} className={cn('rounded-md border p-3', breached ? 'border-destructive/40 bg-destructive/5' : 'border-border bg-background/40')}>
                   <div className="flex items-baseline justify-between">
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{m.label}</p>
+                    <p className="text-xs font-medium text-muted-foreground">{m.label}</p>
                     {rule && (
                       <p className="text-[10px] text-muted-foreground">limit {rule.comparator === 'gt' ? '>' : '<'} {rule.threshold} {m.unit}</p>
                     )}
                   </div>
-                  <p className={cn('font-mono text-xl font-semibold', breached ? 'text-destructive' : 'text-foreground')}>
+                  <p className={cn('text-xl font-semibold tabular-nums', breached ? 'text-destructive' : 'text-foreground')}>
                     {s.latest ?? '—'} <span className="text-xs font-normal text-muted-foreground">{m.unit}</span>
                   </p>
                   <Sparkline points={s.points} threshold={rule?.threshold} danger={!!breached} />
@@ -488,7 +486,7 @@ export function RulesPanel({ canEdit, siteName }: { canEdit: boolean; siteName: 
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] text-xs">
-              <thead className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+              <thead className="border-b border-border text-left text-xs text-muted-foreground">
                 <tr>
                   <th className="px-2 py-2 font-medium">Metric</th>
                   <th className="px-2 py-2 font-medium">Alert when</th>
@@ -502,7 +500,7 @@ export function RulesPanel({ canEdit, siteName }: { canEdit: boolean; siteName: 
                   const m = metricMeta(r.metric)
                   return (
                     <tr key={r.id} className={cn(!r.enabled && 'opacity-50')}>
-                      <td className="px-2 py-2 font-medium text-foreground">{m.label}<span className="ml-1 font-mono text-[10px] text-muted-foreground">{r.metric}</span></td>
+                      <td className="px-2 py-2 font-medium text-foreground">{m.label}</td>
                       <td className="px-2 py-2">
                         <span className="flex items-center gap-1.5">
                           {r.comparator === 'gt' ? 'above' : 'below'}
@@ -513,16 +511,16 @@ export function RulesPanel({ canEdit, siteName }: { canEdit: boolean; siteName: 
                               onBlur={() => commitThreshold(r)}
                               onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                               inputMode="decimal"
-                              className={cn(inputClass, 'h-7 w-20 font-mono')}
+                              className={cn(inputClass, 'h-7 w-20 tabular-nums')}
                             />
                           ) : (
-                            <span className="font-mono text-foreground">{r.threshold}</span>
+                            <span className="tabular-nums text-foreground">{r.threshold}</span>
                           )}
                           <span className="text-muted-foreground">{m.unit}</span>
                         </span>
                       </td>
                       <td className="px-2 py-2 text-muted-foreground">{r.siteId ? siteName(r.siteId) : 'All sites'}</td>
-                      <td className="px-2 py-2 font-mono">{r.riskScore}</td>
+                      <td className="px-2 py-2 tabular-nums">{r.riskScore}</td>
                       <td className="px-2 py-2">
                         <input type="checkbox" checked={r.enabled} disabled={!canEdit}
                           onChange={(e) => save(r, { enabled: e.target.checked })} className="size-4 accent-[var(--primary)]" />

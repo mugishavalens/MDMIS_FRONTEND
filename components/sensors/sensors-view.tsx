@@ -2,13 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Cpu, Download, FileUp, Gauge, ListChecks, Plus, Radio, Upload,
-  User, X, XCircle, type LucideIcon,
+  AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Download, FileUp, Plus, Radio, Upload, User, X, XCircle, type LucideIcon,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusPill } from '@/components/shell/status-pill'
 import { FileDetailDrawer } from '@/components/sensors/detail-drawers'
-import { fmtBytes, fmtWhen, inputClass } from '@/components/sensors/format'
+import { CHECK_LABEL, fmtBytes, fmtWhen, inputClass } from '@/components/sensors/format'
 import { FilterChips, FilterSelect } from '@/components/sensors/filters'
 import { DevicesPanel, LiveReadingsPanel, RulesPanel } from '@/components/sensors/sensor-devices'
 import { ApiError } from '@/lib/api'
@@ -25,11 +24,11 @@ import { cn } from '@/lib/utils'
 type Path = 'manual' | 'direct'
 type DirectTab = 'devices' | 'live' | 'files' | 'rules'
 
-const DIRECT_TABS: { key: DirectTab; label: string; icon: LucideIcon }[] = [
-  { key: 'devices', label: 'Devices', icon: Cpu },
-  { key: 'live', label: 'Live readings', icon: Gauge },
-  { key: 'files', label: 'Files pushed by devices', icon: FileUp },
-  { key: 'rules', label: 'Alert rules', icon: ListChecks },
+const DIRECT_TABS: { key: DirectTab; label: string }[] = [
+  { key: 'devices', label: 'Devices' },
+  { key: 'live', label: 'Live readings' },
+  { key: 'files', label: 'Files pushed by devices' },
+  { key: 'rules', label: 'Alert rules' },
 ]
 
 const PATHS: Record<Path, { n: number; icon: LucideIcon; title: string; who: string; text: string }> = {
@@ -74,7 +73,7 @@ export function SensorsView() {
   return (
     <div className="space-y-4">
       <div>
-        <p className="mb-2 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+        <p className="mb-2 text-sm font-medium text-foreground">
           How is the data getting in? Choose a path
         </p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2" role="tablist" aria-label="Ingestion path">
@@ -91,7 +90,7 @@ export function SensorsView() {
       {path === 'direct' && (
         <>
           <div className="inline-flex flex-wrap rounded-lg border border-border bg-card p-1">
-            {DIRECT_TABS.map(({ key, label, icon: Icon }) => (
+            {DIRECT_TABS.map(({ key, label }) => (
               <button
                 key={key}
                 type="button"
@@ -101,7 +100,7 @@ export function SensorsView() {
                   directTab === key ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
-                <Icon className="size-3.5" /> {label}
+                {label}
               </button>
             ))}
           </div>
@@ -136,7 +135,7 @@ function PathCard({ path, selected, stat, onSelect }: { path: Path; selected: bo
       </span>
       <div className="min-w-0">
         <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
-          <span className={cn('rounded px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide',
+          <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium',
             selected ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground')}>
             Path {n}
           </span>
@@ -144,11 +143,11 @@ function PathCard({ path, selected, stat, onSelect }: { path: Path; selected: bo
         </p>
         <p className="mt-0.5 text-[11px] font-medium text-foreground/80">{who}</p>
         <p className="mt-1 text-xs text-muted-foreground">{text}</p>
-        {stat && <p className="mt-2 font-mono text-[11px] text-foreground">{stat}</p>}
+        {stat && <p className="mt-2 text-xs font-medium tabular-nums text-foreground">{stat}</p>}
       </div>
       {selected && (
-        <span className="absolute right-3 top-3 flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-primary">
-          <CheckCircle2 className="size-3.5" /> Selected
+        <span className="absolute right-3 top-3 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary">
+          Selected
         </span>
       )}
     </button>
@@ -418,7 +417,7 @@ function IssueList({ issues }: { issues: ValidationIssue[] }) {
     <ul className="space-y-1.5">
       {issues.map((i, idx) => (
         <li key={idx}>
-          <p className="text-foreground"><span className="font-mono text-[10px] uppercase text-destructive">{i.check}</span> · {i.message}</p>
+          <p className="text-foreground"><span className="font-medium text-destructive">{CHECK_LABEL[i.check] ?? i.check}:</span> {i.message}</p>
           <p className="text-muted-foreground">Fix: {i.fix}</p>
         </li>
       ))}
@@ -488,14 +487,8 @@ function LogRow({ f, siteName, onOpen }: { f: SensorFile; siteName: (id: string)
             <p className="truncate text-[11px] text-destructive">{f.errors[0].message}</p>
           )}
         </div>
-        <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span className={cn('rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide',
-            f.uploadMethod === 'api' ? 'bg-accent/15 text-accent' : 'bg-primary/15 text-primary')}>
-            {f.uploadMethod === 'api' ? 'Path 2 · Device' : 'Path 1 · Manual'}
-          </span>
-          {f.uploadMethod === 'api'
-            ? <><Radio className="size-3" /> {f.deviceName ?? 'device'}</>
-            : <><User className="size-3" /> {f.uploadedByName ?? 'user'}</>}
+        <span className="text-xs text-muted-foreground">
+          {f.uploadMethod === 'api' ? f.deviceName ?? 'Device' : f.uploadedByName ?? 'User'}
         </span>
         <StatusPill tone={f.status === 'validated' ? 'success' : 'danger'}>{f.status === 'validated' ? 'Accepted' : 'Rejected'}</StatusPill>
         {f.status === 'validated' ? (

@@ -8,6 +8,15 @@ export function fmtBytes(n: number): string {
   return `${(n / 1024 ** 3).toFixed(2)} GB`
 }
 
+// Plain-language names for the validator's check codes.
+export const CHECK_LABEL: Record<string, string> = {
+  format: 'Wrong file type',
+  integrity: 'File can’t be read',
+  geospatial: 'Missing location',
+  size: 'File is empty',
+  sensor_type: 'Unknown sensor',
+}
+
 export function fmtWhen(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—'
 }

@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, Download, ExternalLink, FileText, KeyRound, Power, Radio, User, X } from 'lucide-react'
+import {
+  AlertTriangle, Download, ExternalLink, FileText, KeyRound, Power, X,
+} from 'lucide-react'
 import { StatusPill } from '@/components/shell/status-pill'
-import { fmtBytes, fmtWhen } from '@/components/sensors/format'
+import { CHECK_LABEL, fmtBytes, fmtWhen } from '@/components/sensors/format'
 import { fetchSafetyIncidents, INCIDENT_TYPE_LABEL, type SafetyIncident } from '@/lib/api/safety'
 import {
   SENSOR_LABEL, fetchReadings, fetchSafetyRules, fetchSensorFiles, isLiveSensor, metricMeta, sensorFileDownloadUrl,
@@ -52,7 +54,7 @@ function DrawerShell({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-2">
-      <h3 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{title}</h3>
+      <h3 className="text-xs font-semibold text-foreground">{title}</h3>
       {children}
     </section>
   )
@@ -73,9 +75,9 @@ function Facts({ rows }: { rows: [string, React.ReactNode][] }) {
 
 function PathTag({ method }: { method: 'manual' | 'api' }) {
   return (
-    <span className={cn('rounded px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide',
+    <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium',
       method === 'api' ? 'bg-accent/15 text-accent' : 'bg-primary/15 text-primary')}>
-      {method === 'api' ? 'Path 2 · Device' : 'Path 1 · Manual'}
+      {method === 'api' ? 'Path 2 · From a device' : 'Path 1 · Manual upload'}
     </span>
   )
 }
@@ -125,7 +127,7 @@ export function FileDetailDrawer({
           <ul className="space-y-2">
             {f.errors.map((e, i) => (
               <li key={i} className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs">
-                <p className="text-foreground"><span className="font-mono text-[10px] uppercase text-destructive">{e.check}</span> · {e.message}</p>
+                <p className="text-foreground"><span className="font-medium text-destructive">{CHECK_LABEL[e.check] ?? e.check}:</span> {e.message}</p>
                 <p className="mt-1 text-muted-foreground">How to fix: {e.fix}</p>
               </li>
             ))}
@@ -152,12 +154,12 @@ export function FileDetailDrawer({
         <Facts rows={[
           ['Received', fmtWhen(f.created_at)],
           ['How', f.uploadMethod === 'api'
-            ? <span className="flex items-center gap-1"><Radio className="size-3" /> Pushed automatically by {f.deviceName ?? 'a device'}</span>
-            : <span className="flex items-center gap-1"><User className="size-3" /> Uploaded manually by {f.uploadedByName ?? 'a user'}</span>],
+            ? `Pushed automatically by ${f.deviceName ?? 'a device'}`
+            : `Uploaded manually by ${f.uploadedByName ?? 'a user'}`],
           ['Sensor', SENSOR_LABEL[f.sensorType as keyof typeof SENSOR_LABEL] ?? f.sensorType],
           ['Site', siteName(f.siteId)],
           ['Scan session', f.scanSessionId
-            ? <Link href="/scans" className="font-mono text-primary hover:underline">{f.scanSessionId.slice(0, 8)} · open Survey Analysis</Link>
+            ? <Link href="/scans" className="text-primary hover:underline">{f.scanSessionId.slice(0, 8)} · open Survey Analysis</Link>
             : '— (not attached: rejected)'],
         ]} />
       </Section>
@@ -183,7 +185,7 @@ export function FileDetailDrawer({
             ['Longitude', `${f.bbox[0].toFixed(5)} → ${f.bbox[2].toFixed(5)}`],
             ['Centre', (
               <a key="map" href={`https://www.google.com/maps?q=${center[0]},${center[1]}`} target="_blank" rel="noreferrer"
-                className="inline-flex items-center gap-1 font-mono text-primary hover:underline">
+                className="inline-flex items-center gap-1 tabular-nums text-primary hover:underline">
                 {center[0].toFixed(5)}, {center[1].toFixed(5)} <ExternalLink className="size-3" />
               </a>
             )],
@@ -283,8 +285,8 @@ export function DeviceDetailDrawer({
                   const breached = rule && (rule.comparator === 'gt' ? v > rule.threshold : v < rule.threshold)
                   return (
                     <div key={k} className={cn('rounded-md border px-3 py-2', breached ? 'border-destructive/40 bg-destructive/5' : 'border-border bg-background/40')}>
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{m.label}</p>
-                      <p className={cn('font-mono text-sm font-semibold', breached ? 'text-destructive' : 'text-foreground')}>{v} {m.unit}</p>
+                      <p className="text-xs text-muted-foreground">{m.label}</p>
+                      <p className={cn('text-sm font-semibold tabular-nums', breached ? 'text-destructive' : 'text-foreground')}>{v} {m.unit}</p>
                       <p className="text-[10px] text-muted-foreground">
                         {rule ? `alert ${rule.comparator === 'gt' ? 'above' : 'below'} ${rule.threshold} ${m.unit}` : 'no alert rule'}
                       </p>
@@ -307,7 +309,7 @@ export function DeviceDetailDrawer({
                       {metrics.map((k) => <th key={k} className="px-2 py-1.5 font-medium">{metricMeta(k).label}</th>)}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border font-mono">
+                  <tbody className="divide-y divide-border tabular-nums">
                     {readings.map((r) => (
                       <tr key={r.id}>
                         <td className="whitespace-nowrap px-2 py-1 text-muted-foreground">
