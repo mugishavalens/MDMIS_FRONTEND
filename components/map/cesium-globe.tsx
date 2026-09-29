@@ -118,6 +118,9 @@ export default function CesiumGlobe({
   const [sitesLoaded, setSitesLoaded]           = useState(false)
   const [shipments, setShipments]               = useState<TransportShipment[]>([])
   const [shipmentsLoaded, setShipmentsLoaded]   = useState(false)
+  // Set when the browser can't give us (or later drops) a WebGL context —
+  // replaces Cesium's own raw error dialog with an in-app explanation.
+  const [glError, setGlError]                   = useState<'unavailable' | 'lost' | null>(null)
 
   // ── Fetch real sites before the globe plots anything ──────────────────────
   useEffect(() => {
@@ -146,6 +149,13 @@ export default function CesiumGlobe({
     let destroyed = false
     let resizeObserver: ResizeObserver | null = null
 
+    // Probe first: if the browser won't create a WebGL context, don't let
+    // Cesium try (it would pop its own modal error dialog over the page).
+    if (!webglAvailable()) {
+      setGlError('unavailable')
+      return
+    }
+
     ensureCesium()
       .then((Cesium) => {
         if (destroyed || !containerRef.current || viewerRef.current) return
@@ -169,11 +179,23 @@ export default function CesiumGlobe({
             requestRenderMode:                      false,
             useBrowserRecommendedResolution:        true,
             shadows:                                false,
+            // Render-loop failures are surfaced through glError below instead.
+            showRenderLoopErrors:                   false,
           })
 
           viewerRef.current = viewer
           const scene = viewer.scene
           const globe = scene.globe
+
+          // GPU reset / driver crash mid-session: the canvas goes dead, so say so.
+          scene.canvas.addEventListener('webglcontextlost', (e: Event) => {
+            e.preventDefault()
+            setGlError('lost')
+          })
+          scene.renderError.addEventListener((_scene: unknown, error: unknown) => {
+            console.error('[MDMIS] Cesium render error:', error)
+            setGlError('lost')
+          })
 
           // ── Zoom Controls: guarantee scroll-wheel + touchpad pinch + touch-pinch all zoom ──
           const cameraController = scene.screenSpaceCameraController
@@ -401,6 +423,9 @@ export default function CesiumGlobe({
           setIsLoaded(true)
         } catch (err) {
           console.error('[MDMIS] Cesium setup error:', err)
+          // Cesium appends its error panel to the container before throwing.
+          containerRef.current?.replaceChildren()
+          setGlError('unavailable')
         }
       })
       .catch((err) => {
@@ -591,6 +616,8 @@ export default function CesiumGlobe({
         id="cesium-viewer-root"
         className="absolute inset-0 h-full w-full overflow-hidden" 
       />
+
+      {glError && <WebGLFallback reason={glError} />}
 
       {/* ── Cesium Full-Frame Style Overrides ── */}
       <style>{`
@@ -893,4 +920,47 @@ function row(label: string, value: string) {
       <span style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,0.4);">${label}</span>
       <span style="font-size:12px;font-weight:600;color:#fff;">${value}</span>
     </div>`
+}
+
+function webglAvailable(): boolean {
+  try {
+    const canvas = document.createElement('canvas')
+    const gl = (canvas.getContext('webgl2') || canvas.getContext('webgl')) as WebGLRenderingContext | null
+    if (!gl) return false
+    // Release the probe context immediately — browsers cap live contexts.
+    gl.getExtension('WEBGL_lose_context')?.loseContext()
+    return true
+  } catch {
+    return false
+  }
+}
+
+function WebGLFallback({ reason }: { reason: 'unavailable' | 'lost' }) {
+  return (
+    <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#05080f] p-6">
+      <div className="max-w-md space-y-3 rounded-lg border border-white/10 bg-white/5 p-5 text-sm text-white/80">
+        <p className="text-base font-semibold text-white">
+          {reason === 'lost' ? 'The 3D globe stopped rendering' : "This browser couldn't start the 3D globe"}
+        </p>
+        <p>
+          {reason === 'lost'
+            ? 'The graphics driver reset the WebGL context. Reload the page to restart the globe.'
+            : 'The 3D view needs WebGL graphics acceleration, and the browser refused to provide it on this device.'}
+        </p>
+        <ul className="list-disc space-y-1 pl-5 text-xs text-white/65">
+          <li>Enable <span className="text-white/85">Use graphics acceleration when available</span> in browser settings, then restart the browser.</li>
+          <li>Fully quit and reopen Chrome — it blocks WebGL for a site after repeated GPU crashes until restart.</li>
+          <li>Update the browser and graphics drivers, or try another browser.</li>
+          <li>Check <span className="font-mono text-white/85">chrome://gpu</span>: WebGL should read &ldquo;Hardware accelerated&rdquo;.</li>
+        </ul>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="rounded-md bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20"
+        >
+          Reload page
+        </button>
+      </div>
+    </div>
+  )
 }

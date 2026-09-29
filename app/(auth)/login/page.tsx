@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Mountain, Eye, EyeOff, ArrowRight, ArrowLeft, Shield, Globe2, ScanLine, Lock } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
+import { IDLE_MINUTES } from '@/components/shell/session-timeout'
+import { takeSignOutReason, type SignOutReason } from '@/lib/session-reason'
 
 const REMEMBER_KEY = 'mdmis_remembered_credentials'
 
@@ -20,6 +22,10 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [resent, setResent] = useState(false)
+  const [signedOut, setSignedOut] = useState<SignOutReason | null>(null)
+
+  // Explain an automatic sign-out (inactivity or expired session), once.
+  useEffect(() => { setSignedOut(takeSignOutReason()) }, [])
 
   // Pre-fill from a previously remembered login, if any.
   useEffect(() => {
@@ -217,6 +223,13 @@ export default function LoginPage() {
                 </div>
               </div>
 
+              {signedOut && !error && (
+                <div role="status" className="rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground">
+                  {signedOut === 'idle'
+                    ? `You were signed out after ${IDLE_MINUTES} minutes of inactivity. Sign in again to continue.`
+                    : 'Your session has ended. Please sign in again to continue.'}
+                </div>
+              )}
               {error && (
                 <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                   {error}

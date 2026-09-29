@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { Radar, ScanLine, Layers, ShieldAlert, TrendingUp, TrendingDown } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { fmtNumber } from '@/lib/mdmis-data'
@@ -19,6 +20,8 @@ function buildCards(k: DashboardSummary) {
       value: `${k.activeSites}`,
       sub: `of ${k.totalSites} licensed concessions`,
       icon: Radar,
+      href: '/map',
+      hint: 'Open Intelligence Explorer to see every site on the map',
       trend: TRENDS[0],
       up: true,
     },
@@ -27,6 +30,8 @@ function buildCards(k: DashboardSummary) {
       value: `${k.scansToday}`,
       sub: `avg ${k.avgConfidence}% AI confidence`,
       icon: ScanLine,
+      href: '/scans',
+      hint: 'Open Survey Analysis to see the scans and their classifications',
       trend: TRENDS[1],
       up: true,
     },
@@ -35,6 +40,8 @@ function buildCards(k: DashboardSummary) {
       value: `${fmtNumber(Math.round(k.estimatedReserveTonnes / 1000))}k t`,
       sub: 'across active deposits',
       icon: Layers,
+      href: '/scans',
+      hint: 'Open Survey Analysis to see the zones behind these reserves',
       trend: TRENDS[2],
       up: true,
     },
@@ -43,6 +50,8 @@ function buildCards(k: DashboardSummary) {
       value: `${k.flaggedSites}`,
       sub: `${k.compliantLotsPct}% lots pass due diligence`,
       icon: ShieldAlert,
+      href: '/compliance',
+      hint: 'Open Regulatory Compliance to review flagged lots',
       trend: TRENDS[3],
       up: false,
     },
@@ -67,7 +76,9 @@ export function KpiCards() {
         : cards.map((c) => {
             const Icon = c.icon
             return (
-              <Card key={c.label} className="group gap-0 border-border bg-card p-5 transition-all hover:border-primary/30 hover:shadow-md hover:shadow-primary/5 hover:-translate-y-0.5">
+              <Link key={c.label} href={c.href} title={c.hint}
+                className="group block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60">
+              <Card className="h-full gap-0 border-border bg-card p-5 transition-all group-hover:border-primary/30 group-hover:shadow-md group-hover:shadow-primary/5 group-hover:-translate-y-0.5">
                 <div className="flex items-center justify-between">
                   <span className="flex size-9 items-center justify-center rounded-md bg-secondary/70 text-primary transition-transform group-hover:scale-110">
                     <Icon className="size-4.5" />
@@ -86,6 +97,7 @@ export function KpiCards() {
                 <p className="mt-1 text-sm font-medium text-foreground">{c.label}</p>
                 <p className="text-xs text-muted-foreground">{c.sub}</p>
               </Card>
+              </Link>
             )
           })}
     </div>

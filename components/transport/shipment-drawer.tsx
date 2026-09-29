@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   AlertTriangle, CheckCircle2, Clock, Crosshair, Link2, MapPin, Package, Pause, Play, Radio, Truck, User, X,
+  type LucideIcon,
 } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
 import { StatusPill } from '@/components/shell/status-pill'
@@ -321,7 +322,7 @@ function Stat({ label, value, danger }: { label: string; value: string; danger?:
   )
 }
 
-function Info({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
+function Info({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
     <div className="flex items-center gap-2.5 rounded-md border border-border bg-background/40 p-2.5">
       <Icon className="size-4 text-muted-foreground" />
@@ -336,7 +337,7 @@ function Info({ icon: Icon, label, value }: { icon: React.ElementType; label: st
 function ActionButton({
   icon: Icon, children, onClick, disabled, active, tone,
 }: {
-  icon: React.ElementType
+  icon: LucideIcon
   children: React.ReactNode
   onClick: () => void
   disabled?: boolean

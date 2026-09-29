@@ -1,14 +1,16 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Shield, Users, Activity, Settings, CheckCircle2, XCircle, Clock, BarChart3, Eye, Trash2, Send, Mail } from 'lucide-react'
+import { Shield, Users, Activity, Settings, UserCheck, CheckCircle2, XCircle, Clock, BarChart3, Eye, Trash2, Send, Mail } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { StatusPill } from '@/components/shell/status-pill'
+import { StatCard } from '@/components/shell/stat-card'
 import { RoleGuard } from '@/components/shell/role-guard'
 import { PERMISSIONS, ROLE_THEME, type Role } from '@/lib/rbac'
 import { apiFetch, ApiError } from '@/lib/api'
 import { fetchAuditLogs, fetchAuditSummary, AUDIT_ACTION_LABEL, auditLevel, type AuditLog } from '@/lib/api/audit'
 import { timeAgo } from '@/lib/mdmis-data'
+import { UserAvatar } from '@/components/shell/user-avatar'
 
 interface OrgUser {
   name: string
@@ -17,6 +19,7 @@ interface OrgUser {
   roleLabel: string
   initials: string
   isActive: boolean
+  avatarUrl?: string | null
 }
 
 interface Invitation {
@@ -119,34 +122,29 @@ export function AdminView() {
   }
 
   const pendingInvites = invitations.filter((i) => i.status === 'pending')
-  const systemStats = [
-    { label: 'Total Users', value: String(users.length), icon: Users, color: 'text-primary' },
-    { label: 'Pending Invitations', value: String(pendingInvites.length), icon: Clock, color: 'text-destructive' },
-    { label: 'Audit Events Today', value: eventsToday != null ? String(eventsToday) : '—', icon: Eye, color: 'text-[var(--success)]' },
-    { label: 'Active Sessions', value: '—', icon: Activity, color: 'text-accent' },
-  ]
+  // Cards jump to the tab and section holding those records.
+  function goTo(tab: typeof activeTab, sectionId?: string) {
+    setActiveTab(tab)
+    if (sectionId) {
+      window.setTimeout(() => document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+    }
+  }
 
   return (
     <RoleGuard permission="users.manage">
       <div className="space-y-6">
-        {/* Stats */}
+        {/* Stats — each card opens the records it counts */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {systemStats.map((s) => {
-            const Icon = s.icon
-            return (
-              <Card key={s.label} className="border-border bg-card">
-                <CardContent className="flex items-center gap-3 p-4">
-                  <span className="flex size-10 items-center justify-center rounded-md bg-secondary/70">
-                    <Icon className={`size-5 ${s.color}`} />
-                  </span>
-                  <div>
-                    <p className="text-2xl font-bold text-foreground">{s.value}</p>
-                    <p className="text-xs text-muted-foreground">{s.label}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
+          <StatCard icon={Users} label="Total users" value={String(users.length)}
+            hint="Open the organisation members list" onClick={() => goTo('users', 'org-members')} />
+          <StatCard icon={Clock} label="Pending invitations" value={String(pendingInvites.length)}
+            tone={pendingInvites.length > 0 ? 'danger' : undefined}
+            hint="Open the pending invitations" onClick={() => goTo('users', 'pending-invitations')} />
+          <StatCard icon={Eye} label="Audit events today" value={eventsToday != null ? String(eventsToday) : '—'}
+            hint="Open the audit log" onClick={() => goTo('audit')} />
+          <StatCard icon={UserCheck} tone="success" label="Active accounts"
+            value={String(users.filter((u) => u.isActive).length)}
+            hint="Verified, enabled accounts — open the members list" onClick={() => goTo('users', 'org-members')} />
         </div>
 
         {/* Tabs */}
@@ -200,7 +198,7 @@ export function AdminView() {
             </Card>
 
             {pendingInvites.length > 0 && (
-              <Card className="border-border bg-card">
+              <Card id="pending-invitations" className="scroll-mt-4 border-border bg-card">
                 <CardHeader>
                   <CardTitle className="text-sm">Pending invitations</CardTitle>
                   <CardDescription>{pendingInvites.length} awaiting acceptance</CardDescription>
@@ -225,7 +223,7 @@ export function AdminView() {
               </Card>
             )}
 
-            <Card className="border-border bg-card">
+            <Card id="org-members" className="scroll-mt-4 border-border bg-card">
               <CardHeader>
                 <CardTitle className="text-sm">Organisation Members</CardTitle>
                 <CardDescription>{loadingUsers ? 'Loading…' : `${users.length} account${users.length === 1 ? '' : 's'}`}</CardDescription>
@@ -233,9 +231,7 @@ export function AdminView() {
               <CardContent className="space-y-3">
                 {users.map((u) => (
                   <div key={u.email} className="flex items-center gap-4 rounded-lg border border-border bg-background/40 px-4 py-3">
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                      {u.initials}
-                    </div>
+                    <UserAvatar initials={u.initials} avatarUrl={u.avatarUrl} className="size-9 text-xs" />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-foreground">{u.name}</p>
                       <p className="text-xs text-muted-foreground">{u.email}</p>

@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, Bell, ChevronDown, Sun, Moon, LogOut, User, Settings, LayoutDashboard } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { PRICES } from '@/lib/mdmis-data'
 import { useTheme } from '@/components/shell/theme-provider'
 import { useAuth } from '@/lib/auth-context'
@@ -70,6 +70,7 @@ export function TopBar({ title, subtitle }: { title: string; subtitle: string })
           <button type="button" onClick={() => setMenuOpen((o) => !o)}
             className="flex items-center gap-2 rounded-md border border-border bg-secondary/60 py-1 pl-1 pr-2 transition-colors hover:border-primary/40">
             <Avatar className="size-7">
+              {user?.avatarUrl && <AvatarImage src={user.avatarUrl} alt="" className="object-cover" />}
               <AvatarFallback className="bg-primary text-xs font-semibold text-primary-foreground">{initials}</AvatarFallback>
             </Avatar>
             <div className="hidden leading-tight sm:block text-left">
@@ -116,27 +117,6 @@ export function TopBar({ title, subtitle }: { title: string; subtitle: string })
             </div>
           )}
         </div>
-      </div>
-
-      <div className="flex items-center gap-6 overflow-x-auto border-t border-border bg-card/40 px-4 py-1.5 text-xs scrollbar-thin md:px-6">
-        <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
-          <span className="relative flex size-1.5">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-[var(--success)] opacity-60" />
-            <span className="relative inline-flex size-1.5 rounded-full bg-[var(--success)]" />
-          </span>
-          Live prices
-        </span>
-        {PRICES.map((p) => (
-          <div key={p.commodity} className="flex shrink-0 items-center gap-2">
-            <span className="text-muted-foreground">{p.commodity}</span>
-            <span className="font-mono font-medium text-foreground">
-              {p.unit.startsWith('USD') ? '$' : ''}{p.price.toLocaleString()}
-            </span>
-            <span className={cn('font-mono', p.changePct >= 0 ? 'text-[var(--success)]' : 'text-destructive')}>
-              {p.changePct >= 0 ? '▲' : '▼'} {Math.abs(p.changePct)}%
-            </span>
-          </div>
-        ))}
       </div>
     </header>
   )

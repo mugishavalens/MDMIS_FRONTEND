@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth-context'
 import { useTheme } from '@/components/shell/theme-provider'
 import { can } from '@/lib/rbac'
 import { cn } from '@/lib/utils'
+import { UserAvatar } from '@/components/shell/user-avatar'
 
 export function ProfileDropdown() {
   const [isOpen, setIsOpen] = useState(false)
@@ -66,9 +67,7 @@ export function ProfileDropdown() {
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2.5 rounded-lg px-3 py-2 hover:bg-accent/60 transition-colors"
       >
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-          {user.initials}
-        </div>
+        <UserAvatar initials={user.initials} avatarUrl={user.avatarUrl} className="size-8 text-xs" />
         <div className="hidden sm:block text-left min-w-0">
           <p className="text-sm font-semibold text-foreground truncate">{user.name}</p>
           <p className="text-xs text-muted-foreground truncate">{user.roleLabel}</p>

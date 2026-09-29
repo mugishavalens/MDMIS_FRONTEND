@@ -1,8 +1,9 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useCallback, useContext, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { RoleUser } from '@/lib/rbac'
+import { rememberSignOutReason } from '@/lib/session-reason'
 import { apiFetch, ApiError, setTokens, clearTokens, getAccessToken, setSessionExpiredHandler } from '@/lib/api'
 
 // Login is normally a one-step, password-only sign-in. The only time it
@@ -19,6 +20,8 @@ interface AuthContextType {
   verifyOtp: (email: string, code: string) => Promise<void>
   resendOtp: (email: string) => Promise<void>
   logout: () => void
+  /** Replace the signed-in user after a profile change (e.g. new photo). */
+  updateUser: (user: RoleUser) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -140,14 +143,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // on every request until the next full page reload.
   useEffect(() => {
     setSessionExpiredHandler(() => {
+      rememberSignOutReason('expired')
       logout()
       router.push('/login')
     })
     return () => setSessionExpiredHandler(null)
   })
 
+  const updateUser = useCallback((next: RoleUser) => {
+    setUser(next)
+    sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(next))
+  }, [])
+
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, verifyOtp, resendOtp, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, login, verifyOtp, resendOtp, logout, updateUser }}>
       {isLoading ? null : children}
     </AuthContext.Provider>
   )
