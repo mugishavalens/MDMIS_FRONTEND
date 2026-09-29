@@ -266,6 +266,18 @@ function UploadForm({ sites, onUploaded, onClose }: { sites: Site[]; onUploaded:
 
   useEffect(() => { if (!siteId && sites[0]) setSiteId(sites[0].id) }, [sites, siteId])
 
+  // Pop-up behaviour: Esc closes, the page behind doesn't scroll.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [onClose])
+
   const bboxFilled = Object.values(bbox).every((v) => v !== '' && !isNaN(Number(v)))
 
   async function handleSubmit(e: React.FormEvent) {
@@ -298,8 +310,18 @@ function UploadForm({ sites, onUploaded, onClose }: { sites: Site[]; onUploaded:
   }
 
   return (
-    <div className="rounded-md border border-primary/40 bg-background/40 p-4">
-      <div className="mb-3 flex items-start justify-between gap-2">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-4 backdrop-blur-[2px]"
+      onClick={onClose}
+    >
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Upload sensor data"
+      onClick={(e) => e.stopPropagation()}
+      className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-2xl scrollbar-thin"
+    >
+      <div className="mb-4 flex items-start justify-between gap-2">
         <div>
           <p className="text-sm font-semibold text-foreground">Upload sensor data</p>
           <p className="text-xs text-muted-foreground">Files are checked immediately; valid ones join a scan session for processing.</p>
@@ -386,6 +408,7 @@ function UploadForm({ sites, onUploaded, onClose }: { sites: Site[]; onUploaded:
           </div>
         )}
       </div>
+    </div>
     </div>
   )
 }
