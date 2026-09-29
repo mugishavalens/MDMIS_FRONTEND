@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { SessionTimeout } from '@/components/shell/session-timeout'
 import { Sidebar } from '@/components/shell/sidebar'
 import { useAuth } from '@/lib/auth-context'
 
@@ -25,6 +26,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     <div className="flex h-dvh overflow-hidden bg-background">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
+      <SessionTimeout />
     </div>
   )
 }

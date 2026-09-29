@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { RoleUser } from '@/lib/rbac'
+import { rememberSignOutReason } from '@/lib/session-reason'
 import { apiFetch, ApiError, setTokens, clearTokens, getAccessToken, setSessionExpiredHandler } from '@/lib/api'
 
 // Login is normally a one-step, password-only sign-in. The only time it
@@ -142,6 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // on every request until the next full page reload.
   useEffect(() => {
     setSessionExpiredHandler(() => {
+      rememberSignOutReason('expired')
       logout()
       router.push('/login')
     })
