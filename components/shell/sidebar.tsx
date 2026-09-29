@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Globe2, ScanLine, Link2, Truck,
-  ShieldCheck, Mountain, Radio, Settings, Satellite, HardHat,
+  ShieldCheck, Mountain, Settings, Satellite, HardHat, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth-context'
@@ -25,10 +25,37 @@ const ALL_NAV = [
   { href: '/admin', label: 'System Admin', icon: Settings },
 ]
 
+const COLLAPSED_KEY = 'mdmis_sidebar_collapsed'
+
 export function Sidebar() {
   const pathname = usePathname()
   const { user } = useAuth()
   const [network, setNetwork] = useState<{ total: number; active: number; online: number } | null>(null)
+  const [collapsed, setCollapsed] = useState(false)
+
+  // Remember the choice across visits (read after mount to avoid a hydration mismatch).
+  useEffect(() => {
+    try { setCollapsed(localStorage.getItem(COLLAPSED_KEY) === '1') } catch { /* storage unavailable */ }
+  }, [])
+
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((c) => {
+      try { localStorage.setItem(COLLAPSED_KEY, c ? '0' : '1') } catch { /* storage unavailable */ }
+      return !c
+    })
+  }, [])
+
+  // Ctrl+B / Cmd+B toggles the sidebar, as in most editors.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault()
+        toggleCollapsed()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [toggleCollapsed])
 
   useEffect(() => {
     if (!user) return
@@ -44,84 +71,133 @@ export function Sidebar() {
     ? 'No sensors connected'
     : network.online === network.active ? 'Sensor network online'
     : network.online === 0 ? 'Sensor network offline' : 'Sensor network degraded'
+  const networkDetail = network
+    ? `${network.online} of ${network.active} device${network.active === 1 ? '' : 's'} reporting`
+    : 'Checking…'
 
   const allowedHrefs = user ? ROLE_NAV[user.role] : ['/dashboard']
   const nav = ALL_NAV.filter((n) => allowedHrefs.includes(n.href))
 
   return (
-    <aside className="hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
-      <Link href="/" className="flex h-16 items-center gap-3 border-b border-sidebar-border px-5 transition-colors hover:bg-sidebar-accent/30">
-        <div className="flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
+    <aside
+      className={cn(
+        'relative hidden shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 md:flex',
+        collapsed ? 'w-[72px]' : 'w-64',
+      )}
+    >
+      <button
+        type="button"
+        onClick={toggleCollapsed}
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        aria-expanded={!collapsed}
+        title={`${collapsed ? 'Expand' : 'Collapse'} sidebar (Ctrl+B)`}
+        className="absolute -right-3 top-5 z-20 flex size-6 items-center justify-center rounded-full border border-sidebar-border bg-sidebar text-muted-foreground shadow-sm transition-colors hover:border-primary/50 hover:text-sidebar-foreground"
+      >
+        {collapsed ? <ChevronRight className="size-3.5" /> : <ChevronLeft className="size-3.5" />}
+      </button>
+
+      <Link
+        href="/"
+        title={collapsed ? 'MDMIS — Mining Intelligence' : undefined}
+        className={cn(
+          'flex h-16 items-center gap-3 border-b border-sidebar-border transition-colors hover:bg-sidebar-accent/30',
+          collapsed ? 'justify-center px-0' : 'px-5',
+        )}
+      >
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
           <Mountain className="size-5" />
         </div>
-        <div className="leading-tight">
-          <p className="font-mono text-base font-semibold tracking-tight text-sidebar-foreground">MDMIS</p>
-          <p className="text-xs uppercase tracking-widest text-muted-foreground">Mining Intelligence</p>
-        </div>
+        {!collapsed && (
+          <div className="leading-tight">
+            <p className="text-base font-semibold tracking-tight text-sidebar-foreground">MDMIS</p>
+            <p className="text-xs text-muted-foreground">Mining Intelligence</p>
+          </div>
+        )}
       </Link>
 
       {/* User badge */}
       {user && (
-        <div className="border-b border-sidebar-border px-4 py-3">
-          <div className="flex items-center gap-2.5 rounded-lg bg-sidebar-accent/60 px-3 py-2">
+        <div className={cn('border-b border-sidebar-border py-3', collapsed ? 'px-2' : 'px-4')}>
+          <div
+            title={collapsed ? `${user.name} · ${user.roleLabel}` : undefined}
+            className={cn('flex items-center gap-2.5 rounded-lg bg-sidebar-accent/60 py-2', collapsed ? 'justify-center px-0' : 'px-3')}
+          >
             <UserAvatar initials={user.initials} avatarUrl={user.avatarUrl} className="size-8 text-sm" />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-sidebar-foreground">{user.name}</p>
-              <p className="truncate text-xs text-muted-foreground">{user.roleLabel}</p>
-            </div>
+            {!collapsed && (
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-sidebar-foreground">{user.name}</p>
+                <p className="truncate text-xs text-muted-foreground">{user.roleLabel}</p>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto p-3 scrollbar-thin">
-        <p className="px-3 pb-2 pt-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">
-          Operations
-        </p>
+      <nav className={cn('flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden scrollbar-thin', collapsed ? 'p-2' : 'p-3')}>
+        {!collapsed && (
+          <p className="px-3 pb-2 pt-2 text-xs font-medium text-muted-foreground">Operations</p>
+        )}
         {nav.map((item) => {
-          // /map/inspect/* redirects to /map with URL params now,
-          // so we do an exact match first, then a prefix match that requires 
-          // a '/' continuation AND that no other nav item is a more-specific prefix.
-        const isExact = pathname === item.href
-        const isPrefix = pathname.startsWith(item.href + '/') &&
-          !ALL_NAV.some(
-            (other) =>
-              other.href !== item.href &&
-              other.href.length > item.href.length &&
-              pathname.startsWith(other.href),
-          )
-        const active = isExact || isPrefix
+          // Exact match first, then a prefix match that requires a '/'
+          // continuation and no more-specific nav item claiming the path.
+          const isExact = pathname === item.href
+          const isPrefix = pathname.startsWith(item.href + '/') &&
+            !ALL_NAV.some(
+              (other) =>
+                other.href !== item.href &&
+                other.href.length > item.href.length &&
+                pathname.startsWith(other.href),
+            )
+          const active = isExact || isPrefix
           const Icon = item.icon
           return (
-            <Link key={item.href} href={item.href}
+            <Link
+              key={item.href}
+              href={item.href}
+              title={collapsed ? item.label : undefined}
+              aria-label={collapsed ? item.label : undefined}
+              aria-current={active ? 'page' : undefined}
               className={cn(
-                'group flex items-center gap-3 rounded-md px-3 py-2.5 text-[15px] transition-colors',
+                'group relative flex items-center gap-3 rounded-md py-2.5 text-[15px] transition-colors',
+                collapsed ? 'justify-center px-0' : 'px-3',
                 active
                   ? 'bg-sidebar-accent text-sidebar-foreground'
                   : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
-              )}>
+              )}
+            >
               <Icon className={cn('size-[18px] shrink-0', active ? 'text-primary' : 'text-muted-foreground group-hover:text-sidebar-foreground')} />
-              <span className="flex-1 truncate">{item.label}</span>
-              {active && <span className="size-1.5 rounded-full bg-primary" aria-hidden />}
+              {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
+              {active && (
+                <span
+                  className={cn('size-1.5 rounded-full bg-primary', collapsed && 'absolute right-1.5 top-1.5')}
+                  aria-hidden
+                />
+              )}
             </Link>
           )
         })}
       </nav>
 
-      <div className="border-t border-sidebar-border p-3 space-y-1">
-        <Link href="/sensors" className="flex items-center gap-2.5 rounded-md bg-sidebar-accent/50 px-3 py-2 mb-2 transition-colors hover:bg-sidebar-accent">
+      <div className={cn('border-t border-sidebar-border', collapsed ? 'p-2' : 'p-3')}>
+        <Link
+          href="/sensors"
+          title={collapsed ? `${networkLabel} · ${networkDetail}` : undefined}
+          className={cn(
+            'flex items-center gap-2.5 rounded-md bg-sidebar-accent/50 py-2 transition-colors hover:bg-sidebar-accent',
+            collapsed ? 'justify-center px-0' : 'px-3',
+          )}
+        >
           <span className="relative flex size-2 shrink-0">
             {networkOk && <span className="absolute inline-flex size-full animate-ping rounded-full bg-[var(--success)] opacity-60" />}
             <span className={cn('relative inline-flex size-2 rounded-full',
               networkOk ? 'bg-[var(--success)]' : network && network.online > 0 ? 'bg-primary' : 'bg-muted-foreground')} />
           </span>
-          <div className="leading-tight min-w-0">
-            <p className="flex items-center gap-1 text-sm font-medium text-sidebar-foreground">
-              <Radio className="size-3.5 text-muted-foreground" /> {networkLabel}
-            </p>
-            <p className="text-xs text-muted-foreground truncate">
-              {network ? `${network.online} of ${network.active} device${network.active === 1 ? '' : 's'} reporting` : 'Checking…'}
-            </p>
-          </div>
+          {!collapsed && (
+            <div className="min-w-0 leading-tight">
+              <p className="text-sm font-medium text-sidebar-foreground">{networkLabel}</p>
+              <p className="truncate text-xs text-muted-foreground">{networkDetail}</p>
+            </div>
+          )}
         </Link>
       </div>
     </aside>
