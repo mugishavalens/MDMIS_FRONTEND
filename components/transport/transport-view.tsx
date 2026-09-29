@@ -5,6 +5,7 @@ import { Truck, MapPin, User, Package, Clock, SatelliteDish, AlertTriangle, Plus
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { StatusPill } from '@/components/shell/status-pill'
+import { StatCard } from '@/components/shell/stat-card'
 import { DriversPanel, VehiclesPanel } from '@/components/transport/fleet-registry'
 import { NewShipmentModal } from '@/components/transport/new-shipment-modal'
 import { ShipmentDrawer, statusTone, timeAgo } from '@/components/transport/shipment-drawer'
@@ -24,9 +25,10 @@ function mineralColor(mineral: string): string {
 }
 
 type Tab = 'shipments' | 'vehicles' | 'drivers'
-type Filter = 'active' | ShipmentStatus | 'all'
+type Filter = 'active' | 'attention' | ShipmentStatus | 'all'
 
 const FILTERS: { key: Filter; label: string }[] = [
+  { key: 'attention', label: 'Needs attention' },
   { key: 'active', label: 'Active' },
   { key: 'loading', label: 'Loading' },
   { key: 'in-transit', label: 'In transit' },
@@ -74,17 +76,37 @@ export function TransportView() {
   const freeVehicles = vehicles.filter((v) => v.status === 'available' && !v.currentShipmentId).length
   const inService = vehicles.filter((v) => v.status !== 'retired').length
 
-  const visible = shipments.filter((s) =>
-    filter === 'all' ? true : filter === 'active' ? s.status !== 'delivered' : s.status === filter,
+  const [heaviestFirst, setHeaviestFirst] = useState(false)
+  const filtered = shipments.filter((s) =>
+    filter === 'all' ? true
+      : filter === 'active' ? s.status !== 'delivered'
+      : filter === 'attention' ? s.status !== 'delivered' && (s.status === 'delayed' || !s.gpsIntegrity)
+      : s.status === filter,
   )
+  const visible = heaviestFirst ? [...filtered].sort((a, b) => b.weightKg - a.weightKg) : filtered
+  // Cards filter the shipment list; clicking the active card again clears it.
+  function showShipments(f: Filter, heaviest = false) {
+    setTab('shipments')
+    const same = filter === f && heaviestFirst === heaviest
+    setFilter(same ? 'all' : f)
+    setHeaviestFirst(same ? false : heaviest)
+  }
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Summary icon={Truck} label="Active convoys" value={String(active.length)} />
-        <Summary icon={SatelliteDish} label="In transit" value={String(inTransit)} />
-        <Summary icon={AlertTriangle} label="Delayed / GPS loss" value={String(attention)} tone={attention ? 'danger' : undefined} />
-        <Summary icon={Package} label="Total in motion" value={`${fmtNumber(totalKg)} kg`} />
+        <StatCard icon={Truck} label="Active convoys" value={String(active.length)}
+          hint="Show shipments that are loading or on the road"
+          selected={tab === 'shipments' && filter === 'active' && !heaviestFirst} onClick={() => showShipments('active')} />
+        <StatCard icon={SatelliteDish} label="In transit" value={String(inTransit)}
+          hint="Show shipments currently in transit"
+          selected={tab === 'shipments' && filter === 'in-transit'} onClick={() => showShipments('in-transit')} />
+        <StatCard icon={AlertTriangle} label="Delayed / GPS loss" value={String(attention)} tone={attention ? 'danger' : undefined}
+          hint="Show delayed shipments and those that lost GPS"
+          selected={tab === 'shipments' && filter === 'attention'} onClick={() => showShipments('attention')} />
+        <StatCard icon={Package} label="Total in motion" value={`${fmtNumber(totalKg)} kg`}
+          hint="Show active loads, heaviest first"
+          selected={tab === 'shipments' && heaviestFirst} onClick={() => showShipments('active', true)} />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -240,38 +262,6 @@ function ShipmentCard({ s, onOpen }: { s: TransportShipment; onOpen: () => void 
             GPS integrity lost{s.signalAgeMinutes !== null ? ` — no position for ${s.signalAgeMinutes} min` : ' — signal gap flagged for review'}
           </div>
         )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function Summary({
-  icon: Icon,
-  label,
-  value,
-  tone,
-}: {
-  icon: React.ElementType
-  label: string
-  value: string
-  tone?: 'danger'
-}) {
-  return (
-    <Card className="border-border bg-card">
-      <CardContent className="flex items-center gap-3 p-4">
-        <span
-          className={
-            tone === 'danger'
-              ? 'flex size-9 items-center justify-center rounded-md bg-destructive/12 text-destructive'
-              : 'flex size-9 items-center justify-center rounded-md bg-secondary/70 text-primary'
-          }
-        >
-          <Icon className="size-4.5" />
-        </span>
-        <div>
-          <p className="text-xl font-semibold text-foreground">{value}</p>
-          <p className="text-xs text-muted-foreground">{label}</p>
-        </div>
       </CardContent>
     </Card>
   )

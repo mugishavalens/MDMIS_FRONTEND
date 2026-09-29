@@ -35,7 +35,7 @@ export function NewShipmentModal({
   const [mineral, setMineral] = useState(MINERAL_OPTIONS[0])
   const [weight, setWeight] = useState('')
   const [originKey, setOriginKey] = useState('')
-  const [destKey, setDestKey] = useState(TRANSPORT_HUBS[1].name)
+  const [destKey, setDestKey] = useState<string>(TRANSPORT_HUBS[1].name)
   const [custom, setCustom] = useState({ name: '', lat: '', lng: '' })
   const [vehicleId, setVehicleId] = useState('')
   const [driverId, setDriverId] = useState('')

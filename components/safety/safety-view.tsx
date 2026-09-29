@@ -26,6 +26,7 @@ import { fetchSites, type Site } from '@/lib/api/sites'
 import { fmtDateTime } from '@/lib/mdmis-data'
 import { cn } from '@/lib/utils'
 import { IncidentDrawer, riskTone, statusMeta } from '@/components/safety/incident-drawer'
+import { StatCard } from '@/components/shell/stat-card'
 
 type Filter = 'active' | IncidentStatus | 'all'
 const FILTERS: { key: Filter; label: string }[] = [
@@ -46,6 +47,7 @@ export function SafetyView() {
   const [error, setError] = useState<string | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
+  const [sortByRisk, setSortByRisk] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -84,18 +86,26 @@ export function SafetyView() {
 
   const open = incidents.filter((i) => i.status === 'open').length
   const escalated = incidents.filter((i) => i.status === 'escalated').length
-  const visible = incidents.filter((i) =>
+  const filtered = incidents.filter((i) =>
     filter === 'all' ? true : filter === 'active' ? i.status !== 'resolved' : i.status === filter,
   )
+  const visible = sortByRisk ? [...filtered].sort((a, b) => b.riskScore - a.riskScore) : filtered
+  // Cards filter the list; clicking the active card again clears it.
+  const toggleFilter = (f: Filter) => setFilter((cur) => (cur === f ? 'all' : f))
   const avgRisk = incidents.length > 0 ? Math.round(incidents.reduce((a, i) => a + i.riskScore, 0) / incidents.length) : 0
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Summary icon={HardHat} label="Total incidents" value={String(incidents.length)} />
-        <Summary icon={AlertTriangle} label="Open" value={String(open)} tone="danger" />
-        <Summary icon={AlertOctagon} label="Escalated" value={String(escalated)} tone="danger" />
-        <Summary icon={ShieldAlert} label="Avg. risk score" value={String(avgRisk)} />
+        <StatCard icon={HardHat} label="Total incidents" value={String(incidents.length)}
+          hint="Show all incidents" selected={filter === 'all' && !sortByRisk}
+          onClick={() => { setFilter('all'); setSortByRisk(false) }} />
+        <StatCard icon={AlertTriangle} label="Open" value={String(open)} tone="danger"
+          hint="Show only open incidents" selected={filter === 'open'} onClick={() => toggleFilter('open')} />
+        <StatCard icon={AlertOctagon} label="Escalated" value={String(escalated)} tone="danger"
+          hint="Show only escalated incidents" selected={filter === 'escalated'} onClick={() => toggleFilter('escalated')} />
+        <StatCard icon={ShieldAlert} label="Avg. risk score" value={String(avgRisk)}
+          hint="Sort incidents by risk, highest first" selected={sortByRisk} onClick={() => setSortByRisk((v) => !v)} />
       </div>
 
       {error && (
@@ -104,7 +114,7 @@ export function SafetyView() {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         {FILTERS.map((f) => (
           <button
             key={f.key}
@@ -120,6 +130,12 @@ export function SafetyView() {
             {f.label}
           </button>
         ))}
+        {sortByRisk && (
+          <button type="button" onClick={() => setSortByRisk(false)}
+            className="rounded-full border border-primary/40 bg-primary/12 px-2.5 py-1 text-[11px] font-medium text-primary">
+            Sorted by highest risk · Clear
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -208,37 +224,5 @@ export function SafetyView() {
         />
       )}
     </div>
-  )
-}
-
-function Summary({
-  icon: Icon,
-  label,
-  value,
-  tone,
-}: {
-  icon: LucideIcon
-  label: string
-  value: string
-  tone?: 'danger'
-}) {
-  return (
-    <Card className="border-border bg-card">
-      <CardContent className="flex items-center gap-3 p-4">
-        <span
-          className={
-            tone === 'danger'
-              ? 'flex size-9 items-center justify-center rounded-md bg-destructive/12 text-destructive'
-              : 'flex size-9 items-center justify-center rounded-md bg-secondary/70 text-primary'
-          }
-        >
-          <Icon className="size-4.5" />
-        </span>
-        <div>
-          <p className="text-xl font-semibold text-foreground">{value}</p>
-          <p className="text-xs text-muted-foreground">{label}</p>
-        </div>
-      </CardContent>
-    </Card>
   )
 }
