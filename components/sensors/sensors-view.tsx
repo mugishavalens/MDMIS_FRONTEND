@@ -32,16 +32,14 @@ const DIRECT_TABS: { key: DirectTab; label: string; icon: LucideIcon }[] = [
   { key: 'rules', label: 'Alert rules', icon: ListChecks },
 ]
 
-const PATHS: Record<Path, { n: number; icon: LucideIcon; title: string; who: string; text: string; banner: string }> = {
+const PATHS: Record<Path, { n: number; icon: LucideIcon; title: string; who: string; text: string }> = {
   manual: {
     n: 1, icon: Upload, title: 'Manual upload', who: 'A person, from the web app',
     text: 'Someone on the team uploads survey files after fieldwork — GeoTIFF, HDF5, SEG-Y, CSV…',
-    banner: 'Files come in when a team member uploads them here. Each one is checked, stored and added to a scan session.',
   },
   direct: {
     n: 2, icon: Radio, title: 'Direct from sensors', who: 'A device, automatically',
     text: 'Registered sensors send data on their own using an API key — live readings or survey files, no person involved.',
-    banner: 'Data arrives automatically from registered devices. Live readings are checked against the alert rules as they arrive.',
   },
 }
 
@@ -72,8 +70,6 @@ export function SensorsView() {
   }, [])
 
   const siteName = useCallback((id: string) => sites.find((s) => s.id === id)?.name ?? id, [sites])
-  const active = PATHS[path]
-  const ActiveIcon = active.icon
 
   return (
     <div className="space-y-4">
@@ -85,18 +81,6 @@ export function SensorsView() {
           {(Object.keys(PATHS) as Path[]).map((key) => (
             <PathCard key={key} path={key} selected={path === key} stat={stats?.[key]} onSelect={() => setPath(key)} />
           ))}
-        </div>
-      </div>
-
-      <div className="flex items-start gap-3 rounded-lg border border-primary/40 bg-primary/8 px-4 py-3">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <ActiveIcon className="size-4" />
-        </span>
-        <div>
-          <p className="text-sm font-semibold text-foreground">
-            You are in Path {active.n} · {active.title}
-          </p>
-          <p className="text-xs text-muted-foreground">{active.banner}</p>
         </div>
       </div>
 
