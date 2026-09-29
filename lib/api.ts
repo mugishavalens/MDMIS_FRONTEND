@@ -1,7 +1,7 @@
 // Thin fetch client for the MDMIS Django backend (see ../backend).
 // Handles JWT access/refresh token storage and silent refresh-on-401.
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
 
 const ACCESS_KEY = 'mdmis_access_token'
 const REFRESH_KEY = 'mdmis_refresh_token'
@@ -91,7 +91,8 @@ export async function apiFetch<T = unknown>(
 ): Promise<T> {
   const doFetch = async (): Promise<Response> => {
     const headers = new Headers(options.headers)
-    headers.set('Content-Type', 'application/json')
+    // FormData (file uploads) needs the browser's own multipart boundary header.
+    if (!(options.body instanceof FormData)) headers.set('Content-Type', 'application/json')
     if (auth) {
       const token = getAccessToken()
       if (token) headers.set('Authorization', `Bearer ${token}`)

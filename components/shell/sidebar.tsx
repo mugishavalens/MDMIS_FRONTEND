@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
@@ -11,11 +12,13 @@ import { useTheme } from '@/components/shell/theme-provider'
 import { useAuth } from '@/lib/auth-context'
 import { ROLE_NAV } from '@/lib/rbac'
 import { UserAvatar } from '@/components/shell/user-avatar'
+import { fetchDeviceSummary } from '@/lib/api/sensors'
 
 const ALL_NAV = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/map', label: 'Intelligence Explorer', icon: Globe2 },
   { href: '/scans', label: 'Survey Analysis', icon: ScanLine },
+  { href: '/sensors', label: 'Sensor Data', icon: Satellite },
   { href: '/traceability', label: 'Chain of Custody', icon: Link2 },
   { href: '/transport', label: 'Fleet Management', icon: Truck },
   { href: '/compliance', label: 'Regulatory Compliance', icon: ShieldCheck },
@@ -28,6 +31,22 @@ export function Sidebar() {
   const router = useRouter()
   const { theme, toggle } = useTheme()
   const { user, logout } = useAuth()
+  const [network, setNetwork] = useState<{ total: number; active: number; online: number } | null>(null)
+
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    const load = () => fetchDeviceSummary().then((s) => { if (!cancelled) setNetwork(s) }).catch(() => {})
+    load()
+    const t = window.setInterval(load, 60_000)
+    return () => { cancelled = true; window.clearInterval(t) }
+  }, [user])
+
+  const networkOk = !!network && network.active > 0 && network.online === network.active
+  const networkLabel = !network || network.active === 0
+    ? 'No sensors connected'
+    : network.online === network.active ? 'Sensor network online'
+    : network.online === 0 ? 'Sensor network offline' : 'Sensor network degraded'
 
   const allowedHrefs = user ? ROLE_NAV[user.role] : ['/dashboard']
   const nav = ALL_NAV.filter((n) => allowedHrefs.includes(n.href))
@@ -97,18 +116,21 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-sidebar-border p-3 space-y-1">
-        <div className="flex items-center gap-2.5 rounded-md bg-sidebar-accent/50 px-3 py-2 mb-2">
+        <Link href="/sensors" className="flex items-center gap-2.5 rounded-md bg-sidebar-accent/50 px-3 py-2 mb-2 transition-colors hover:bg-sidebar-accent">
           <span className="relative flex size-2 shrink-0">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-[var(--success)] opacity-60" />
-            <span className="relative inline-flex size-2 rounded-full bg-[var(--success)]" />
+            {networkOk && <span className="absolute inline-flex size-full animate-ping rounded-full bg-[var(--success)] opacity-60" />}
+            <span className={cn('relative inline-flex size-2 rounded-full',
+              networkOk ? 'bg-[var(--success)]' : network && network.online > 0 ? 'bg-primary' : 'bg-muted-foreground')} />
           </span>
           <div className="leading-tight min-w-0">
             <p className="flex items-center gap-1 text-sm font-medium text-sidebar-foreground">
-              <Radio className="size-3.5 text-muted-foreground" /> Sensor network online
+              <Radio className="size-3.5 text-muted-foreground" /> {networkLabel}
             </p>
-            <p className="text-xs text-muted-foreground truncate">12 UAVs · 34 ground nodes</p>
+            <p className="text-xs text-muted-foreground truncate">
+              {network ? `${network.online} of ${network.active} device${network.active === 1 ? '' : 's'} reporting` : 'Checking…'}
+            </p>
           </div>
-        </div>
+        </Link>
 
         <button type="button" onClick={toggle}
           className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-[15px] text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground transition-colors">
