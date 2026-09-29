@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Globe2, ScanLine, Link2, Truck,
-  ShieldCheck, Mountain, Settings, Satellite, HardHat, ChevronLeft, ChevronRight,
+  ShieldCheck, Mountain, Settings, Satellite, HardHat, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth-context'
@@ -81,39 +81,38 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'relative hidden shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 md:flex',
+        'hidden shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 md:flex',
         collapsed ? 'w-[72px]' : 'w-64',
       )}
     >
-      <button
-        type="button"
-        onClick={toggleCollapsed}
-        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        aria-expanded={!collapsed}
-        title={`${collapsed ? 'Expand' : 'Collapse'} sidebar (Ctrl+B)`}
-        className="absolute -right-3 top-5 z-20 flex size-6 items-center justify-center rounded-full border border-sidebar-border bg-sidebar text-muted-foreground shadow-sm transition-colors hover:border-primary/50 hover:text-sidebar-foreground"
-      >
-        {collapsed ? <ChevronRight className="size-3.5" /> : <ChevronLeft className="size-3.5" />}
-      </button>
-
-      <Link
-        href="/"
-        title={collapsed ? 'MDMIS — Mining Intelligence' : undefined}
+      <div
         className={cn(
-          'flex h-16 items-center gap-3 border-b border-sidebar-border transition-colors hover:bg-sidebar-accent/30',
-          collapsed ? 'justify-center px-0' : 'px-5',
+          'flex h-16 shrink-0 items-center border-b border-sidebar-border',
+          collapsed ? 'justify-center' : 'gap-2 pl-5 pr-3',
         )}
       >
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <Mountain className="size-5" />
-        </div>
         {!collapsed && (
-          <div className="leading-tight">
-            <p className="text-base font-semibold tracking-tight text-sidebar-foreground">MDMIS</p>
-            <p className="text-xs text-muted-foreground">Mining Intelligence</p>
-          </div>
+          <Link href="/" className="flex min-w-0 flex-1 items-center gap-3 rounded-md transition-opacity hover:opacity-90">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <Mountain className="size-5" />
+            </div>
+            <div className="min-w-0 leading-tight">
+              <p className="text-base font-semibold tracking-tight text-sidebar-foreground">MDMIS</p>
+              <p className="truncate text-xs text-muted-foreground">Mining Intelligence</p>
+            </div>
+          </Link>
         )}
-      </Link>
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-expanded={!collapsed}
+          title={`${collapsed ? 'Expand' : 'Collapse'} sidebar (Ctrl+B)`}
+          className="flex size-9 shrink-0 items-center justify-center rounded-md border border-sidebar-border text-sidebar-foreground transition-colors hover:border-primary/50 hover:bg-sidebar-accent"
+        >
+          {collapsed ? <PanelLeftOpen className="size-[18px]" /> : <PanelLeftClose className="size-[18px]" />}
+        </button>
+      </div>
 
       {/* User badge */}
       {user && (
