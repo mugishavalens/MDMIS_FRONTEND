@@ -2,13 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Globe2, ScanLine, Link2, Truck,
-  ShieldCheck, Mountain, Radio, LogOut, Sun, Moon, Settings, Satellite, HardHat,
+  ShieldCheck, Mountain, Radio, Settings, Satellite, HardHat,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useTheme } from '@/components/shell/theme-provider'
 import { useAuth } from '@/lib/auth-context'
 import { ROLE_NAV } from '@/lib/rbac'
 import { UserAvatar } from '@/components/shell/user-avatar'
@@ -28,9 +27,7 @@ const ALL_NAV = [
 
 export function Sidebar() {
   const pathname = usePathname()
-  const router = useRouter()
-  const { theme, toggle } = useTheme()
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   const [network, setNetwork] = useState<{ total: number; active: number; online: number } | null>(null)
 
   useEffect(() => {
@@ -50,11 +47,6 @@ export function Sidebar() {
 
   const allowedHrefs = user ? ROLE_NAV[user.role] : ['/dashboard']
   const nav = ALL_NAV.filter((n) => allowedHrefs.includes(n.href))
-
-  function handleLogout() {
-    logout()
-    router.push('/')
-  }
 
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
@@ -131,17 +123,6 @@ export function Sidebar() {
             </p>
           </div>
         </Link>
-
-        <button type="button" onClick={toggle}
-          className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-[15px] text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground transition-colors">
-          {theme === 'dark' ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
-          {theme === 'dark' ? 'Light mode' : 'Dark mode'}
-        </button>
-
-        <button type="button" onClick={handleLogout}
-          className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-[15px] text-destructive hover:bg-destructive/10 transition-colors">
-          <LogOut className="size-[18px]" /> Sign out
-        </button>
       </div>
     </aside>
   )
