@@ -130,7 +130,7 @@ export default function LoginPage() {
           </div>
 
           <p className="text-white/90 text-lg leading-relaxed mb-8 font-light">
-            AI-powered subsurface detection, 3D geospatial visualization, and compliance automation for Rwanda's mining sector
+            AI-powered subsurface detection, 3D geospatial visualization, and compliance automation for mining sectors
           </p>
 
           <div className="grid grid-cols-2 gap-3 mb-8">
