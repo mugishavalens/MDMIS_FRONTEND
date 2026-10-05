@@ -3,9 +3,10 @@
 import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Mountain, Eye, EyeOff, ArrowRight, CheckCircle2, XCircle, Lock } from 'lucide-react'
+import { Eye, EyeOff, ArrowRight, CheckCircle2, XCircle, Lock } from 'lucide-react'
 import { apiFetch, ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
+import { BrandMark } from '@/components/shell/brand-mark'
 
 const ROLE_LABELS: Record<string, string> = {
   geologist: 'Geologist',
@@ -99,9 +100,7 @@ function AcceptInviteForm() {
 
       <div className="relative w-full max-w-md">
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
-            <Mountain className="size-6" />
-          </div>
+          <BrandMark className="size-12 rounded-xl shadow-lg shadow-primary/20" />
           <div>
             <p className="font-mono text-base font-bold text-foreground">MDMIS</p>
             <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">Accept Invitation</p>

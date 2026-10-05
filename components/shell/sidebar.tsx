@@ -4,14 +4,14 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, Globe2, ScanLine, Link2, Truck,
-  ShieldCheck, Mountain, Settings, Satellite, HardHat, PanelLeftClose, PanelLeftOpen,
+  LayoutDashboard, Globe2, ScanLine, Link2, Truck, ShieldCheck, Settings, Satellite, HardHat, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth-context'
 import { ROLE_NAV } from '@/lib/rbac'
 import { UserAvatar } from '@/components/shell/user-avatar'
 import { fetchDeviceSummary } from '@/lib/api/sensors'
+import { BrandMark } from '@/components/shell/brand-mark'
 
 const ALL_NAV = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -93,9 +93,7 @@ export function Sidebar() {
       >
         {!collapsed && (
           <Link href="/" className="flex min-w-0 flex-1 items-center gap-3 rounded-md transition-opacity hover:opacity-90">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Mountain className="size-5" />
-            </div>
+            <BrandMark className="size-9 rounded-md" />
             <div className="min-w-0 leading-tight">
               <p className="text-base font-semibold tracking-tight text-sidebar-foreground">MDMIS</p>
               <p className="truncate text-xs text-muted-foreground">Mining Intelligence</p>

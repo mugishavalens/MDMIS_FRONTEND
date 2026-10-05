@@ -299,23 +299,6 @@ export const REPORTS: ComplianceReport[] = [
   { id: 'RPT-2026-ITSCI-06', title: 'ITSCI Tag Reconciliation', framework: 'ITSCI', period: 'June 2026', status: 'overdue', coveragePct: 74.5, flaggedLots: 2, submittedTo: 'ITRI / iTSCi' },
 ]
 
-// ---- Live commodity prices ----------------------------------------------
-
-export interface PriceTick {
-  commodity: string
-  unit: string
-  price: number
-  changePct: number
-}
-
-export const PRICES: PriceTick[] = [
-  { commodity: 'Tin', unit: 'USD/t', price: 31480, changePct: 1.4 },
-  { commodity: 'Tantalum', unit: 'USD/kg', price: 172, changePct: -0.6 },
-  { commodity: 'Tungsten (APT)', unit: 'USD/mtu', price: 345, changePct: 0.9 },
-  { commodity: 'Gold', unit: 'USD/oz', price: 2338, changePct: 0.3 },
-  { commodity: 'Lithium (Li₂CO₃)', unit: 'USD/t', price: 13850, changePct: -2.1 },
-]
-
 // ---- Dashboard KPIs + activity + timeseries ------------------------------
 
 export const KPIS = {

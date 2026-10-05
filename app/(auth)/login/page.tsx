@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Mountain, Eye, EyeOff, ArrowRight, ArrowLeft, Shield, Globe2, ScanLine, Lock } from 'lucide-react'
+import { Eye, EyeOff, ArrowRight, ArrowLeft, Shield, Globe2, ScanLine, Lock } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { IDLE_MINUTES } from '@/components/shell/session-timeout'
 import { takeSignOutReason, type SignOutReason } from '@/lib/session-reason'
+import { BrandMark } from '@/components/shell/brand-mark'
 
 const REMEMBER_KEY = 'mdmis_remembered_credentials'
 
@@ -112,9 +113,7 @@ export default function LoginPage() {
           href="/"
           className="relative z-10 flex items-center gap-3 px-8 pt-8 group w-fit"
         >
-          <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-lg shadow-primary/20">
-            <Mountain className="size-5" />
-          </div>
+          <BrandMark className="size-10 rounded-lg shadow-lg shadow-primary/20" />
           <div className="flex items-center gap-1.5 text-white/80 group-hover:text-white transition-colors">
             <ArrowLeft className="size-3.5" />
             <span className="text-sm font-medium">Back to home</span>
@@ -167,9 +166,7 @@ export default function LoginPage() {
           {/* Mobile Logo + back home */}
           <div className="flex lg:hidden items-center justify-between mb-10">
             <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-lg shadow-primary/20">
-                <Mountain className="size-6" />
-              </div>
+              <BrandMark className="size-10 rounded-lg shadow-lg shadow-primary/20" />
               <div>
                 <p className="font-mono text-base font-bold text-foreground">MDMIS</p>
                 <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">Mining Intelligence</p>
