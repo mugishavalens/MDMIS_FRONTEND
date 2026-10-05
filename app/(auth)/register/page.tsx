@@ -3,10 +3,11 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Mountain, Eye, EyeOff, ArrowRight, CheckCircle2, Lock } from 'lucide-react'
+import { Eye, EyeOff, ArrowRight, CheckCircle2, Lock } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { apiFetch, ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
+import { BrandMark } from '@/components/shell/brand-mark'
 
 // Self-registration always creates a new Organisation + its org_admin — no
 // role picker. The org_admin invites teammates (geologist, compliance
@@ -189,9 +190,7 @@ export default function RegisterPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <div className="inline-flex size-20 items-center justify-center rounded-3xl bg-primary text-primary-foreground mx-auto mb-6 shadow-2xl shadow-primary/20">
-              <Mountain className="size-10" />
-            </div>
+            <BrandMark className="mx-auto mb-6 block size-20 rounded-3xl shadow-2xl shadow-primary/20" />
             <h1 className="text-4xl font-bold text-white mb-3">Join MDMIS</h1>
             <p className="text-sm uppercase tracking-[0.2em] text-white/70 mb-4">Create Your Organisation</p>
             <p className="text-white/80 text-base leading-relaxed">
@@ -259,9 +258,7 @@ export default function RegisterPage() {
         >
           {/* Mobile Logo */}
           <div className="flex lg:hidden items-center justify-center gap-3 mb-10">
-            <div className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
-              <Mountain className="size-6" />
-            </div>
+            <BrandMark className="size-12 rounded-xl shadow-lg shadow-primary/20" />
             <div>
               <p className="font-mono text-base font-bold text-foreground">MDMIS</p>
               <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">Create Organisation</p>

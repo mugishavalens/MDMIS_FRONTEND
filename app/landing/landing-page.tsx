@@ -16,7 +16,6 @@ import {
   Lock,
   MapPin,
   Menu,
-  Mountain,
   Play,
   Radio,
   ScanLine,
@@ -31,6 +30,7 @@ import { ProfileDropdown } from '@/components/shell/profile-dropdown'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { useAuth } from '@/lib/auth-context'
 import { KPIS, MINERAL_META } from '@/lib/mdmis-data'
+import { BrandMark } from '@/components/shell/brand-mark'
 
 const videos = {
   terrain: '/videos/istockphoto-1689123730-640_adpp_is.mp4',
@@ -554,9 +554,7 @@ export function LandingPage() {
       >
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
           <Link href="/" className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-lg shadow-primary/20">
-              <Mountain className="size-5" />
-            </span>
+            <BrandMark className="size-10 rounded-lg shadow-lg shadow-primary/20" />
             <span className="leading-tight">
               <span className="block font-mono text-sm font-bold">MDMIS</span>
               <span className="block text-[10px] uppercase text-muted-foreground">Mining Intelligence</span>
@@ -991,9 +989,7 @@ export function LandingPage() {
       <footer className="border-t border-border bg-card/20 px-5 py-8 md:px-8">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 text-center md:flex-row md:text-left">
           <div className="flex items-center gap-3">
-            <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Mountain className="size-5" />
-            </span>
+            <BrandMark className="size-9 rounded-lg" />
             <div>
               <p className="font-mono text-sm font-bold">MDMIS</p>
               <p className="text-xs text-muted-foreground">Mineral Detection & Mining Intelligence System</p>
