@@ -257,6 +257,9 @@ function TerrainScene({ site, xray, resetSignal, controlsRef }: TerrainSceneProp
         <div className="pointer-events-none rounded-lg border border-white/20 bg-black/70 px-3 py-2 text-center backdrop-blur">
           <div className="text-sm font-bold text-white">{site.name}</div>
           <div className="text-xs text-white/60">{site.primaryMineral} • {site.depthMeters}m deep</div>
+          {(site as { dataSource?: string }).dataSource && (
+            <div className="text-[10px] text-white/50">Site data: {(site as { dataSource?: string }).dataSource}</div>
+          )}
           <div className="text-[10px] text-white/50">
             {demGrid
               ? `Terrain: ${demTerrain.sourceLabel} · ${demGrid.minElevation.toFixed(0)}–${demGrid.maxElevation.toFixed(0)} m · vertical ×${verticalExaggeration!.toFixed(1)}`
