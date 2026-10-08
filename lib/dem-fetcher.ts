@@ -10,6 +10,8 @@
  * - Fallback to procedural terrain if real data unavailable
  */
 
+import { apiFetch } from './api'
+
 export interface DemDataPoint {
   lat: number
   lon: number
@@ -25,6 +27,21 @@ export interface DemGrid {
   elevations: number[][] // row-major: [lat index][lon index]
   minElevation: number
   maxElevation: number
+}
+
+/**
+ * Site terrain ingested on the MDMIS side (drone DTM, or Copernicus 30 m
+ * until flights happen), served by the backend at /sites/{id}/terrain.
+ * Same DemGrid shape as below: row 0 = south (minLat), col 0 = west.
+ * Returns null when nothing has been ingested for the site yet.
+ */
+export async function fetchSiteTerrain(siteId: string): Promise<(DemGrid & { source?: string }) | null> {
+  try {
+    return await apiFetch<DemGrid & { source?: string }>(`/sites/${encodeURIComponent(siteId)}/terrain`)
+  } catch (err) {
+    console.warn(`[DEM] No ingested terrain for ${siteId}, falling back:`, err)
+    return null
+  }
 }
 
 /**

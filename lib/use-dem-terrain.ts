@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react'
 import {
   fetchDemGridData,
+  fetchSiteTerrain,
   DemGrid,
   normalizeElevationGrid,
   getSiteBoundingBox,
@@ -18,17 +19,35 @@ export interface UseDemTerrainResult {
   demGrid: DemGrid | null
   normalizedElevations: number[][] | null
   error: string | null
+  // 'ingested' = MDMIS terrain (drone DTM / Copernicus) via the backend;
+  // 'open-elevation' = public API fallback; null = not loaded
+  source: 'ingested' | 'open-elevation' | null
+  sourceLabel: string | null
 }
 
+type LoadedDem = { grid: DemGrid; source: 'ingested' | 'open-elevation'; sourceLabel: string } | null
+
 // Simple in-memory cache (one per site)
-const demCache = new Map<string, Promise<DemGrid | null>>()
+const demCache = new Map<string, Promise<LoadedDem>>()
+
+async function loadDem(site: DetectionSite, gridSize: number): Promise<LoadedDem> {
+  const ingested = await fetchSiteTerrain(site.id)
+  if (ingested) {
+    return { grid: ingested, source: 'ingested', sourceLabel: ingested.source ?? 'ingested terrain' }
+  }
+  const bbox = getSiteBoundingBox(site.lat, site.lng, 2) // 2km radius
+  const grid = await fetchDemGridData(bbox.minLat, bbox.maxLat, bbox.minLon, bbox.maxLon, gridSize)
+  return grid ? { grid, source: 'open-elevation', sourceLabel: 'Open-Elevation (public API)' } : null
+}
 
 export function useDemTerrain(site: DetectionSite, gridSize: number = 64): UseDemTerrainResult {
   const [state, setState] = useState<UseDemTerrainResult>({
     status: 'loading',
     demGrid: null,
     normalizedElevations: null,
-    error: null
+    error: null,
+    source: null,
+    sourceLabel: null,
   })
 
   useEffect(() => {
@@ -36,65 +55,40 @@ export function useDemTerrain(site: DetectionSite, gridSize: number = 64): UseDe
 
     async function load() {
       try {
-        console.log(`[useDemTerrain] Loading DEM for site: ${site.id} (lat: ${site.lat}, lng: ${site.lng})`)
-        
-        // Check cache first
         let fetchPromise = demCache.get(site.id)
-        
         if (!fetchPromise) {
-          console.log(`[useDemTerrain] Cache miss for ${site.id}, fetching new data...`)
-          // Fetch new data
-          const bbox = getSiteBoundingBox(site.lat, site.lng, 2) // 2km radius
-          fetchPromise = fetchDemGridData(
-            bbox.minLat,
-            bbox.maxLat,
-            bbox.minLon,
-            bbox.maxLon,
-            gridSize
-          )
+          fetchPromise = loadDem(site, gridSize)
           demCache.set(site.id, fetchPromise)
-        } else {
-          console.log(`[useDemTerrain] Cache hit for ${site.id}`)
         }
-
-        const demGrid = await fetchPromise
-
+        const loaded = await fetchPromise
         if (!isMounted) return
 
-        if (!demGrid) {
-          console.warn(`[useDemTerrain] DEM grid is null for ${site.id}`)
+        if (!loaded) {
           setState({
-            status: 'error',
-            demGrid: null,
-            normalizedElevations: null,
-            error: 'DEM data unavailable for this location'
+            status: 'error', demGrid: null, normalizedElevations: null,
+            error: 'DEM data unavailable for this location', source: null, sourceLabel: null,
           })
           return
         }
 
-        console.log(`[useDemTerrain] DEM grid received: ${demGrid.gridSize}x${demGrid.gridSize}, elevation range [${demGrid.minElevation}, ${demGrid.maxElevation}]m`)
-
-        // Normalize elevations to terrain amplitude
-        // Use a moderate amplitude for realistic hills (not too exaggerated)
-        const targetAmplitude = 8 // local units, roughly 8-10m per unit
-        const normalized = normalizeElevationGrid(demGrid, targetAmplitude)
-
-        console.log(`[useDemTerrain] Normalized elevations to amplitude ${targetAmplitude}`)
-
+        const { grid, source, sourceLabel } = loaded
+        console.log(`[useDemTerrain] ${site.id}: ${source} ${grid.gridSize}x${grid.gridSize}, ` +
+          `${grid.minElevation}-${grid.maxElevation} m`)
         setState({
           status: 'ready',
-          demGrid,
-          normalizedElevations: normalized,
-          error: null
+          demGrid: grid,
+          normalizedElevations: normalizeElevationGrid(grid, 8),
+          error: null,
+          source,
+          sourceLabel,
         })
       } catch (err) {
         console.error(`[useDemTerrain] Error loading DEM for ${site.id}:`, err)
         if (isMounted) {
           setState({
-            status: 'error',
-            demGrid: null,
-            normalizedElevations: null,
-            error: err instanceof Error ? err.message : 'Unknown error fetching terrain data'
+            status: 'error', demGrid: null, normalizedElevations: null,
+            error: err instanceof Error ? err.message : 'Unknown error fetching terrain data',
+            source: null, sourceLabel: null,
           })
         }
       }
