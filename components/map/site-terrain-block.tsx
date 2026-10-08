@@ -21,6 +21,12 @@ const TERRAIN_SIZE = 32
 const CUT_DEPTH = 16
 const DEFAULT_CAM_POS: [number, number, number] = [28, 22, 28]
 const DEFAULT_CAM_TARGET: [number, number, number] = [0, 3, 0]
+// Real terrain: lowest ground sits at SURFACE_BASE units, relief drawn at
+// true scale x up to MAX_VERTICAL_EXAGGERATION, never taller than
+// MAX_SURFACE_UNITS so steep sites still fit the camera framing.
+const SURFACE_BASE = 1
+const MAX_VERTICAL_EXAGGERATION = 2
+const MAX_SURFACE_UNITS = 12
 
 // ──TERRAIN GENERATION ──────────────────────────────────────────────────────
 
@@ -40,72 +46,80 @@ function TerrainScene({ site, xray, resetSignal, controlsRef }: TerrainSceneProp
   const satelliteData = useSatelliteTexture(site, 2)
   const tex = satelliteData.status === 'ready' ? satelliteData.texture : null
 
-  // Build terrain mesh
+  // Build terrain mesh. Real elevations when the site has terrain (MDMIS
+  // ingested DTM via the backend, else Open-Elevation); procedural noise
+  // only as a last-resort fallback.
+  const demGrid = demTerrain.status === 'ready' ? demTerrain.demGrid : null
   const terrainData = useMemo(() => {
-    console.log(`[Terrain] Building terrain block for ${site.id}`)
-    
-    // Generate procedural elevation grid
-    const gridSize = 32
-    const grid: number[][] = []
-    
-    for (let j = 0; j < gridSize; j++) {
-      const row: number[] = []
-      for (let i = 0; i < gridSize; i++) {
-        const x = i / gridSize
-        const y = j / gridSize
-        // Generate terrain with variation
-        const v1 = Math.sin(x * 4 + seed) * Math.cos(y * 4 + seed) * 2
-        const v2 = Math.sin(x * 8) * Math.cos(y * 7) * 1
-        const height = 4 + v1 + v2  // Base height 4, with -3 to +3 variation
-        row.push(Math.max(0, height))
+    let grid: number[][]
+    let gridSize: number
+    let verticalExaggeration: number | null = null
+
+    if (demGrid) {
+      // True proportions: metres per scene unit from the grid's real width,
+      // then a stated vertical exaggeration (capped so very steep sites
+      // still fit the frame). Unlike normalising every site to the same
+      // height, a flat site stays flat and a steep one stays steep.
+      gridSize = demGrid.gridSize
+      const midLat = (demGrid.minLat + demGrid.maxLat) / 2
+      const widthM = (demGrid.maxLon - demGrid.minLon) * 111_000 * Math.cos((midLat * Math.PI) / 180)
+      const mPerUnit = widthM / TERRAIN_SIZE
+      const reliefUnits = (demGrid.maxElevation - demGrid.minElevation) / mPerUnit || 1
+      verticalExaggeration = Math.min(MAX_VERTICAL_EXAGGERATION, MAX_SURFACE_UNITS / reliefUnits)
+      grid = demGrid.elevations.map(row =>
+        row.map(e => SURFACE_BASE + ((e - demGrid.minElevation) / mPerUnit) * verticalExaggeration!),
+      )
+    } else {
+      gridSize = 32
+      grid = []
+      for (let j = 0; j < gridSize; j++) {
+        const row: number[] = []
+        for (let i = 0; i < gridSize; i++) {
+          const x = i / gridSize
+          const y = j / gridSize
+          const v1 = Math.sin(x * 4 + seed) * Math.cos(y * 4 + seed) * 2
+          const v2 = Math.sin(x * 8) * Math.cos(y * 7) * 1
+          row.push(Math.max(0, 4 + v1 + v2))
+        }
+        grid.push(row)
       }
-      grid.push(row)
     }
 
-    // Create surface geometry
-    const geometry = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, 32, 32)
-    const positions = geometry.attributes.position as THREE.BufferAttribute
-    const posArray = positions.array as Float32Array
+    // PlaneGeometry is created upright in the X-Y plane; lay it flat first.
+    // After rotateX(-PI/2): X = east, -Z = north, Y = up, and the plane's
+    // UV v=1 edge (top of the satellite image = north) lands on -Z.
+    const segments = Math.max(32, gridSize - 1)
+    const geometry = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, segments, segments)
+    geometry.rotateX(-Math.PI / 2)
+    const posArray = (geometry.attributes.position as THREE.BufferAttribute).array as Float32Array
 
-    // Apply elevation to vertex Y positions
     for (let i = 0; i < posArray.length; i += 3) {
       const x = posArray[i]
       const z = posArray[i + 2]
-
-      // Map to grid coordinates
-      const gx = Math.floor(((x / half + 1) / 2) * (gridSize - 1))
-      const gy = Math.floor(((z / half + 1) / 2) * (gridSize - 1))
-      const gx2 = Math.min(gx + 1, gridSize - 1)
-      const gy2 = Math.min(gy + 1, gridSize - 1)
-
-      // Interpolate between grid points
-      const fx = ((x / half + 1) / 2) * (gridSize - 1) - gx
-      const fy = ((z / half + 1) / 2) * (gridSize - 1) - gy
-
-      const v00 = grid[gy][gx]
-      const v10 = grid[gy][gx2]
-      const v01 = grid[gy2][gx]
-      const v11 = grid[gy2][gx2]
-
-      const h0 = v00 + (v10 - v00) * fx
-      const h1 = v01 + (v11 - v01) * fx
-      const h = h0 + (h1 - h0) * fy
-
-      posArray[i + 1] = h  // Set Y (height)
+      // DemGrid: row 0 = south (+Z edge), col 0 = west (-X edge)
+      const gc = ((x + half) / TERRAIN_SIZE) * (gridSize - 1)
+      const gr = ((half - z) / TERRAIN_SIZE) * (gridSize - 1)
+      const c0 = Math.min(Math.max(Math.floor(gc), 0), gridSize - 1)
+      const r0 = Math.min(Math.max(Math.floor(gr), 0), gridSize - 1)
+      const c1 = Math.min(c0 + 1, gridSize - 1)
+      const r1 = Math.min(r0 + 1, gridSize - 1)
+      const fc = gc - c0
+      const fr = gr - r0
+      const h0 = grid[r0][c0] + (grid[r0][c1] - grid[r0][c0]) * fc
+      const h1 = grid[r1][c0] + (grid[r1][c1] - grid[r1][c0]) * fc
+      posArray[i + 1] = h0 + (h1 - h0) * fr
     }
 
-    positions.needsUpdate = true
+    geometry.attributes.position.needsUpdate = true
     geometry.computeVertexNormals()
 
-    const maxH = Math.max(...Array.from(posArray).filter((_, i) => i % 3 === 1))
+    let maxH = 0
+    for (let i = 1; i < posArray.length; i += 3) maxH = Math.max(maxH, posArray[i])
 
-    return {
-      surfaceGeometry: geometry,
-      maxHeight: maxH,
-    }
-  }, [site.id])
+    return { surfaceGeometry: geometry, maxHeight: maxH, verticalExaggeration }
+  }, [site.id, demGrid, seed, half])
 
-  const { surfaceGeometry, maxHeight } = terrainData
+  const { surfaceGeometry, maxHeight, verticalExaggeration } = terrainData
 
   // Mineral deposit positioning
   const veinColor = MINERAL_HEX[site.primaryMineral] || '#ff6b6b'
@@ -243,6 +257,11 @@ function TerrainScene({ site, xray, resetSignal, controlsRef }: TerrainSceneProp
         <div className="pointer-events-none rounded-lg border border-white/20 bg-black/70 px-3 py-2 text-center backdrop-blur">
           <div className="text-sm font-bold text-white">{site.name}</div>
           <div className="text-xs text-white/60">{site.primaryMineral} • {site.depthMeters}m deep</div>
+          <div className="text-[10px] text-white/50">
+            {demGrid
+              ? `Terrain: ${demTerrain.sourceLabel} · ${demGrid.minElevation.toFixed(0)}–${demGrid.maxElevation.toFixed(0)} m · vertical ×${verticalExaggeration!.toFixed(1)}`
+              : 'Terrain: illustrative (no elevation data)'}
+          </div>
         </div>
       </Html>
 
