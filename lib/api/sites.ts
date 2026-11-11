@@ -3,6 +3,9 @@ import type { DetectionSite, Mineral } from '@/lib/mdmis-data'
 
 export interface Site extends DetectionSite {
   lastScanMethod: string
+  // Attribution for sites imported from outside data, e.g.
+  // "IPIS open data (ODC-BY 1.0)"; empty for MDMIS's own sites.
+  dataSource?: string
 }
 
 // Backend stores minerals lowercase ("cassiterite"); MINERAL_META and the

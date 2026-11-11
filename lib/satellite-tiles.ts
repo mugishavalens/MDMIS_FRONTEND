@@ -24,6 +24,50 @@ export function latLonToTile(lat: number, lon: number, zoom: number): TileCoord 
 }
 
 /**
+ * Lat/lon to global Web Mercator pixel coordinates (256 px tiles), unfloored
+ */
+export function latLonToPixel(lat: number, lon: number, zoom: number): { x: number; y: number } {
+  const n = Math.pow(2, zoom) * 256
+  const rad = (lat * Math.PI) / 180
+  return {
+    x: ((lon + 180) / 360) * n,
+    y: ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * n,
+  }
+}
+
+// Largest texture side every WebGL device can take. Bigger textures (the
+// stitched zoom-18 mosaic is ~7000 px) show as plain white or black on
+// many integrated GPUs; 4096 px over the ~4 km block is still ~1 m/px.
+const MAX_TEXTURE_PX = 4096
+
+/**
+ * Crop the stitched tile mosaic to exactly the requested box, so the photo
+ * lines up with the terrain under it (whole tiles overhang the box by up
+ * to a tile on each side), and scale it down to MAX_TEXTURE_PX.
+ */
+export function cropToBounds(
+  mosaic: HTMLCanvasElement,
+  minLat: number, maxLat: number, minLon: number, maxLon: number,
+  zoom: number,
+): HTMLCanvasElement {
+  const origin = latLonToTile(maxLat, minLon, zoom)
+  const nw = latLonToPixel(maxLat, minLon, zoom)
+  const se = latLonToPixel(minLat, maxLon, zoom)
+  const sx = nw.x - origin.x * 256
+  const sy = nw.y - origin.y * 256
+  const sw = se.x - nw.x
+  const sh = se.y - nw.y
+  const scale = Math.min(1, MAX_TEXTURE_PX / Math.max(sw, sh))
+  const out = document.createElement('canvas')
+  out.width = Math.max(1, Math.round(sw * scale))
+  out.height = Math.max(1, Math.round(sh * scale))
+  const ctx = out.getContext('2d')!
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(mosaic, sx, sy, sw, sh, 0, 0, out.width, out.height)
+  return out
+}
+
+/**
  * Convert tile coordinates to quadkey (Bing Maps format)
  */
 export function tileToQuadkey(x: number, y: number, z: number): string {
@@ -130,6 +174,9 @@ export async function canvasToTexture(canvas: HTMLCanvasElement) {
   texture.magFilter = THREE.LinearFilter
   texture.minFilter = THREE.LinearMipMapLinearFilter
   texture.generateMipmaps = true
+  // The renderer outputs sRGB; untagged, the photo's colours get converted
+  // twice and come out washed-out and pale.
+  texture.colorSpace = THREE.SRGBColorSpace
   return texture
 }
 
@@ -146,6 +193,7 @@ export async function getSatelliteTextureForSite(lat: number, lon: number, radiu
   const minLon = lon - lonDelta
   const maxLon = lon + lonDelta
 
-  const canvas = await fetchSatelliteTiles(minLat, maxLat, minLon, maxLon, 18)
-  return canvasToTexture(canvas)
+  const zoom = 18
+  const mosaic = await fetchSatelliteTiles(minLat, maxLat, minLon, maxLon, zoom)
+  return canvasToTexture(cropToBounds(mosaic, minLat, maxLat, minLon, maxLon, zoom))
 }

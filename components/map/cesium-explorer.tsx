@@ -13,6 +13,7 @@ import {
   type DetectionSite,
 } from '@/lib/mdmis-data'
 import { fetchSites, type Site } from '@/lib/api/sites'
+import { DataSourceCredit } from '@/components/map/data-source-credit'
 import { StatusPill } from '@/components/shell/status-pill'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
@@ -321,6 +322,7 @@ export function CesiumExplorer() {
               <div className="min-w-0">
                 <h3 className="truncate text-sm font-semibold text-foreground">{selected.name}</h3>
                 <p className="font-mono text-xs text-muted-foreground">{selected.id} · {selected.district}</p>
+                <DataSourceCredit source={(selected as Site).dataSource} className="mt-0.5" />
               </div>
               <StatusPill tone={riskTone(selected.riskLevel)}>{RISK_META[selected.riskLevel].label}</StatusPill>
             </div>

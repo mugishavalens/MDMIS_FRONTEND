@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { DetectionSite } from '@/lib/mdmis-data'
+import { dataSourceLink } from '@/components/map/data-source-credit'
 import { fetchSites, type Site } from '@/lib/api/sites'
 import { fetchShipments, type TransportShipment } from '@/lib/api/transport'
 import { MINERAL_HEX } from '@/lib/site-terrain'
@@ -852,8 +853,25 @@ function removeInfoOverlay() {
   }
 }
 
-function showInfoOverlay(site: DetectionSite) {
+// Site text can come from imported outside data (e.g. IPIS), so it is
+// escaped before going into innerHTML.
+function escapeHtml(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
+  ))
+}
+
+function showInfoOverlay(site: DetectionSite & { dataSource?: string }) {
   removeInfoOverlay()
+  const credit = site.dataSource
+    ? (() => {
+        const href = dataSourceLink(site.dataSource)
+        const text = escapeHtml(site.dataSource)
+        return `<div style="font-size:10px;color:rgba(255,255,255,0.45);margin:-6px 0 10px;padding-left:18px;">Site data: ${
+          href ? `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color:rgba(255,255,255,0.6);text-decoration:underline;">${text}</a>` : text
+        }</div>`
+      })()
+    : ''
 
   const RISK_HEX_MAP: Record<DetectionSite['riskLevel'], string> = {
     low: '#3fcf8e', moderate: '#e6b84d', high: '#f97316', critical: '#ef4444',
@@ -882,11 +900,12 @@ function showInfoOverlay(site: DetectionSite) {
       ">×</button>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
         <span style="width:10px;height:10px;border-radius:50%;background:${riskColor};flex-shrink:0;display:inline-block;"></span>
-        <span style="font-weight:700;font-size:15px;color:#fff;">${site.name}</span>
+        <span style="font-weight:700;font-size:15px;color:#fff;">${escapeHtml(site.name)}</span>
       </div>
       <div style="font-size:11px;color:rgba(255,255,255,0.45);margin-bottom:12px;padding-left:18px;">
-        ${site.district} · ${site.id}
+        ${escapeHtml(site.district)} · ${escapeHtml(site.id)}
       </div>
+      ${credit}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-bottom:14px;">
         ${row('Mineral', `<span style="color:${mineralColor}">${site.primaryMineral}</span>`)}
         ${row('Grade', `${site.gradePct}%`)}
