@@ -9,9 +9,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Html, ContactShadows, PerspectiveCamera } from '@react-three/drei'
-import type { OrbitControlsImpl } from 'three-stdlib'
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import type { DetectionSite } from '@/lib/mdmis-data'
-import { MINERAL_HEX } from '@/lib/site-terrain'
+import { MINERAL_HEX, STRATA_PRESETS, getSiteTerrain } from '@/lib/site-terrain'
+import { buildWallsAndBottom } from '@/lib/terrain-geometry'
 import { useDemTerrain } from '@/lib/use-dem-terrain'
 import { useSatelliteTexture } from '@/lib/use-satellite-texture'
 import { seedFromString } from '@/lib/noise'
@@ -19,14 +20,18 @@ import { seedFromString } from '@/lib/noise'
 // ── CONSTANTS ──────────────────────────────────────────────────────────────
 const TERRAIN_SIZE = 32  
 const CUT_DEPTH = 16
-const DEFAULT_CAM_POS: [number, number, number] = [28, 22, 28]
-const DEFAULT_CAM_TARGET: [number, number, number] = [0, 3, 0]
+const DEFAULT_CAM_POS: [number, number, number] = [40, 26, 40]
+const DEFAULT_CAM_TARGET: [number, number, number] = [0, -3, 0]
 // Real terrain: lowest ground sits at SURFACE_BASE units, relief drawn at
 // true scale x up to MAX_VERTICAL_EXAGGERATION, never taller than
 // MAX_SURFACE_UNITS so steep sites still fit the camera framing.
 const SURFACE_BASE = 1
 const MAX_VERTICAL_EXAGGERATION = 2
 const MAX_SURFACE_UNITS = 12
+// X-ray: the sides all but disappear (an outline keeps the block's shape
+// readable) and the ground turns translucent, so what's inside shows.
+const XRAY_WALL_OPACITY = 0.08
+const XRAY_SURFACE_OPACITY = 0.45
 
 // ──TERRAIN GENERATION ──────────────────────────────────────────────────────
 
@@ -116,10 +121,44 @@ function TerrainScene({ site, xray, resetSignal, controlsRef }: TerrainSceneProp
     let maxH = 0
     for (let i = 1; i < posArray.length; i += 3) maxH = Math.max(maxH, posArray[i])
 
-    return { surfaceGeometry: geometry, maxHeight: maxH, verticalExaggeration }
+    // Walls hang from the surface's own edge heights, so the block is closed
+    // all round: flat walls topped at y=0 left a gap under the rim that you
+    // could see straight through from low angles. heights[j][i]: j=0 is the
+    // north (-Z) row, the same vertex order PlaneGeometry uses.
+    const heights: number[][] = []
+    for (let j = 0; j <= segments; j++) {
+      const row: number[] = []
+      for (let i = 0; i <= segments; i++) row.push(posArray[(j * (segments + 1) + i) * 3 + 1])
+      heights.push(row)
+    }
+    const strataBands = STRATA_PRESETS[getSiteTerrain(site.id).rockTone].bands
+    const { wallGeometry, bottomGeometry } = buildWallsAndBottom(heights, {
+      seed, size: TERRAIN_SIZE, segments, cutDepth: CUT_DEPTH, strataBands,
+    })
+
+    // Outline for x-ray: the rim along the surface edge, the base square and
+    // the four vertical corners.
+    const outline: number[] = []
+    const rim: [number, number, number][] = []
+    for (let i = 0; i <= segments; i++) rim.push([-half + (i / segments) * TERRAIN_SIZE, heights[0][i], -half])
+    for (let j = 1; j <= segments; j++) rim.push([half, heights[j][segments], -half + (j / segments) * TERRAIN_SIZE])
+    for (let i = segments - 1; i >= 0; i--) rim.push([-half + (i / segments) * TERRAIN_SIZE, heights[segments][i], half])
+    for (let j = segments - 1; j >= 0; j--) rim.push([-half, heights[j][0], -half + (j / segments) * TERRAIN_SIZE])
+    for (let k = 0; k < rim.length - 1; k++) outline.push(...rim[k], ...rim[k + 1])
+    const base = [[-half, -half], [half, -half], [half, half], [-half, half]]
+    base.forEach(([x, z], k) => {
+      const [nx, nz] = base[(k + 1) % 4]
+      outline.push(x, -CUT_DEPTH, z, nx, -CUT_DEPTH, nz)
+    })
+    const cornerTop = [heights[0][0], heights[0][segments], heights[segments][segments], heights[segments][0]]
+    base.forEach(([x, z], k) => outline.push(x, -CUT_DEPTH, z, x, cornerTop[k], z))
+    const outlineGeometry = new THREE.BufferGeometry()
+    outlineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(outline, 3))
+
+    return { surfaceGeometry: geometry, wallGeometry, bottomGeometry, outlineGeometry, maxHeight: maxH, verticalExaggeration }
   }, [site.id, demGrid, seed, half])
 
-  const { surfaceGeometry, maxHeight, verticalExaggeration } = terrainData
+  const { surfaceGeometry, wallGeometry, bottomGeometry, outlineGeometry, maxHeight, verticalExaggeration } = terrainData
 
   // Mineral deposit positioning
   const veinColor = MINERAL_HEX[site.primaryMineral] || '#ff6b6b'
@@ -149,7 +188,7 @@ function TerrainScene({ site, xray, resetSignal, controlsRef }: TerrainSceneProp
     <>
       {/* BACKGROUND & FOG */}
       <color attach="background" args={['#0a0e27']} />
-      <fog attach="fog" args={['#0a0e27', 50, 120]} />
+      <fog attach="fog" args={['#0a0e27', 80, 180]} />
 
       {/* LIGHTING */}
       <directionalLight
@@ -171,47 +210,58 @@ function TerrainScene({ site, xray, resetSignal, controlsRef }: TerrainSceneProp
 
       {/* TERRAIN GROUP */}
       <group>
-        {/* SURFACE MESH */}
-        <mesh geometry={surfaceGeometry} castShadow receiveShadow>
+        {/* SURFACE MESH — translucent in x-ray. The material is keyed on xray
+            and on the photo so three.js rebuilds it: flipping `transparent`,
+            or adding a map to a material first compiled without one, doesn't
+            take effect on a live material (the photo used to arrive after
+            the first render and the ground stayed plain white). */}
+        <mesh geometry={surfaceGeometry} castShadow={!xray} receiveShadow renderOrder={2}>
           <meshStandardMaterial
+            key={`${xray ? 'xray' : 'solid'}-${tex?.uuid ?? 'no-photo'}`}
             map={tex}
             color={tex ? '#ffffff' : '#6b7d4d'}
             roughness={tex ? 0.65 : 0.75}
             metalness={0.05}
-            side={THREE.FrontSide}
+            side={xray ? THREE.DoubleSide : THREE.FrontSide}
+            transparent={xray}
+            opacity={xray ? XRAY_SURFACE_OPACITY : 1}
+            depthWrite={!xray}
           />
         </mesh>
 
-        {/* WALLS - 4 rectangular faces */}
-        {/* North wall (z = -half) */}
-        <mesh position={[0, -CUT_DEPTH / 2, -half]} castShadow receiveShadow>
-          <planeGeometry args={[TERRAIN_SIZE, CUT_DEPTH]} />
-          <meshStandardMaterial color="#8b7355" roughness={0.8} metalness={0} side={THREE.FrontSide} />
-        </mesh>
-
-        {/* South wall (z = +half) */}
-        <mesh position={[0, -CUT_DEPTH / 2, half]} rotation={[0, Math.PI, 0]} castShadow receiveShadow>
-          <planeGeometry args={[TERRAIN_SIZE, CUT_DEPTH]} />
-          <meshStandardMaterial color="#8b7355" roughness={0.8} metalness={0} side={THREE.FrontSide} />
-        </mesh>
-
-        {/* East wall (x = +half) */}
-        <mesh position={[half, -CUT_DEPTH / 2, 0]} rotation={[0, Math.PI / 2, 0]} castShadow receiveShadow>
-          <planeGeometry args={[TERRAIN_SIZE, CUT_DEPTH]} />
-          <meshStandardMaterial color="#8b7355" roughness={0.8} metalness={0} side={THREE.FrontSide} />
-        </mesh>
-
-        {/* West wall (x = -half) */}
-        <mesh position={[-half, -CUT_DEPTH / 2, 0]} rotation={[0, -Math.PI / 2, 0]} castShadow receiveShadow>
-          <planeGeometry args={[TERRAIN_SIZE, CUT_DEPTH]} />
-          <meshStandardMaterial color="#8b7355" roughness={0.8} metalness={0} side={THREE.FrontSide} />
+        {/* WALLS — rock strata cutaway, following the surface edge down to the
+            base (illustrative layering: no source gives real subsurface strata) */}
+        <mesh geometry={wallGeometry} castShadow={!xray} receiveShadow renderOrder={2}>
+          <meshStandardMaterial
+            key={xray ? 'xray' : 'solid'}
+            vertexColors
+            roughness={0.85}
+            metalness={0}
+            side={THREE.FrontSide}
+            transparent={xray}
+            opacity={xray ? XRAY_WALL_OPACITY : 1}
+            depthWrite={!xray}
+          />
         </mesh>
 
         {/* BOTTOM PLATE */}
-        <mesh position={[0, -CUT_DEPTH, 0]} receiveShadow>
-          <planeGeometry args={[TERRAIN_SIZE, TERRAIN_SIZE]} />
-          <meshStandardMaterial color="#3a3a3a" roughness={0.9} metalness={0.1} />
+        <mesh geometry={bottomGeometry} receiveShadow renderOrder={2}>
+          <meshStandardMaterial
+            key={xray ? 'xray' : 'solid'}
+            vertexColors
+            roughness={0.9}
+            metalness={0.1}
+            transparent={xray}
+            opacity={xray ? XRAY_WALL_OPACITY : 1}
+            depthWrite={!xray}
+          />
         </mesh>
+
+        {xray && (
+          <lineSegments geometry={outlineGeometry} renderOrder={3}>
+            <lineBasicMaterial color="#9fb4d9" transparent opacity={0.55} depthWrite={false} />
+          </lineSegments>
+        )}
 
         {/* MINERAL DEPOSIT (X-Ray visible) */}
         {xray && (
@@ -235,7 +285,7 @@ function TerrainScene({ site, xray, resetSignal, controlsRef }: TerrainSceneProp
             </mesh>
 
             {/* Deposit sphere */}
-            <mesh position={[0, depositY, 0]}>
+            <mesh position={[0, depositY, 0]} renderOrder={1}>
               <sphereGeometry args={[depositSize, 32, 32]} />
               <meshStandardMaterial color={veinColor} emissive={veinColor} emissiveIntensity={0.7} transparent opacity={0.85} />
             </mesh>
@@ -265,6 +315,7 @@ function TerrainScene({ site, xray, resetSignal, controlsRef }: TerrainSceneProp
               ? `Terrain: ${demTerrain.sourceLabel} · ${demGrid.minElevation.toFixed(0)}–${demGrid.maxElevation.toFixed(0)} m · vertical ×${verticalExaggeration!.toFixed(1)}`
               : 'Terrain: illustrative (no elevation data)'}
           </div>
+          <div className="text-[10px] text-white/40">Rock layers on the sides are illustrative</div>
         </div>
       </Html>
 
@@ -274,7 +325,7 @@ function TerrainScene({ site, xray, resetSignal, controlsRef }: TerrainSceneProp
         target={DEFAULT_CAM_TARGET}
         enablePan={true}
         minDistance={15}
-        maxDistance={60}
+        maxDistance={90}
         minPolarAngle={0.1}
         maxPolarAngle={Math.PI * 0.9}
         autoRotate={autoRotate}

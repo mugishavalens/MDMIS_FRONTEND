@@ -91,7 +91,7 @@ function heightField(nx: number, nz: number, seed: number, amplitude: number, fr
   return amplitude * (floor + combined * (1 - floor) * fade)
 }
 
-interface WallsAndBottomOptions {
+export interface WallsAndBottomOptions {
   seed: number
   size: number
   segments: number
@@ -107,7 +107,7 @@ interface WallsAndBottomOptions {
  * data source gives us real subsurface layering), only the surface on top
  * differs between the two.
  */
-function buildWallsAndBottom(heights: number[][], opts: WallsAndBottomOptions) {
+export function buildWallsAndBottom(heights: number[][], opts: WallsAndBottomOptions) {
   const { seed, size, segments, cutDepth, strataBands } = opts
   const half = size / 2
   const seg = segments
@@ -135,13 +135,18 @@ function buildWallsAndBottom(heights: number[][], opts: WallsAndBottomOptions) {
     return [clamp01(base[0] + jitter), clamp01(base[1] + jitter), clamp01(base[2] + jitter)] as const
   }
 
-  function addWallStrip(edgePts: { x: number; z: number; topY: number }[], axis: 'x' | 'z') {
+  // Strips are laid out west->east or north->south, so the south and west
+  // walls' triangles would face into the block; they're wound the other
+  // way (flip), or, drawn single-sided, they vanish when seen from outside.
+  function addWallStrip(edgePts: { x: number; z: number; topY: number }[], axis: 'x' | 'z', flip: boolean) {
     const base = wallPositions.length / 3
     edgePts.forEach((p, ei) => {
       for (let k = 0; k <= vertSegs; k++) {
         const t = k / vertSegs
         const y = p.topY + (bottomY - p.topY) * t
-        const jitter = (fbm2D(ei * 0.9 + seed, k * 1.1 + seed, seed + 700, 2) - 0.5) * 0.32
+        // Rough rock face, but none at the top row: it has to meet the
+        // surface's edge exactly or there's a sliver of gap along the rim.
+        const jitter = (fbm2D(ei * 0.9 + seed, k * 1.1 + seed, seed + 700, 2) - 0.5) * 0.32 * t
         const x = axis === 'x' ? p.x + jitter : p.x
         const z = axis === 'z' ? p.z + jitter : p.z
         wallPositions.push(x, y, z)
@@ -155,7 +160,8 @@ function buildWallsAndBottom(heights: number[][], opts: WallsAndBottomOptions) {
         const b = a + (vertSegs + 1)
         const c = a + 1
         const d = b + 1
-        wallIndices.push(a, b, c, c, b, d)
+        if (flip) wallIndices.push(a, c, b, c, d, b)
+        else wallIndices.push(a, b, c, c, b, d)
       }
     }
   }
@@ -174,10 +180,10 @@ function buildWallsAndBottom(heights: number[][], opts: WallsAndBottomOptions) {
     westEdge.push({ x: -half, z: nz * half, topY: heights[j][0] })
     eastEdge.push({ x: half, z: nz * half, topY: heights[j][seg] })
   }
-  addWallStrip(northEdge, 'z')
-  addWallStrip(southEdge, 'z')
-  addWallStrip(westEdge, 'x')
-  addWallStrip(eastEdge, 'x')
+  addWallStrip(northEdge, 'z', false)
+  addWallStrip(southEdge, 'z', true)
+  addWallStrip(westEdge, 'x', true)
+  addWallStrip(eastEdge, 'x', false)
 
   const wallGeometry = new THREE.BufferGeometry()
   wallGeometry.setAttribute('position', new THREE.Float32BufferAttribute(wallPositions, 3))
