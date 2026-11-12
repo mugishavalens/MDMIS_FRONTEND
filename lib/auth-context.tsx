@@ -19,6 +19,10 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<LoginResult>
   verifyOtp: (email: string, code: string) => Promise<void>
   resendOtp: (email: string) => Promise<void>
+  /** Emails a reset code (same answer whether or not the account exists). */
+  requestPasswordReset: (email: string) => Promise<void>
+  /** Sets a new password with the emailed code and signs in. */
+  resetPassword: (email: string, code: string, newPassword: string) => Promise<void>
   logout: () => void
   /** Replace the signed-in user after a profile change (e.g. new photo). */
   updateUser: (user: RoleUser) => void
@@ -100,17 +104,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const verifyOtp = async (email: string, code: string) => {
+  // Both verify-otp and reset-password answer with tokens + user.
+  const signInWith = async (path: string, body: object) => {
     try {
       const data = await apiFetch<{ access: string; refresh: string; user: RoleUser }>(
-        '/auth/verify-otp/',
-        { method: 'POST', body: JSON.stringify({ email, code }) },
+        path,
+        { method: 'POST', body: JSON.stringify(body) },
         { auth: false },
       )
       setTokens(data.access, data.refresh)
       sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(data.user))
       setUser(data.user)
       setIsAuthenticated(true)
+    } catch (err) {
+      if (err instanceof ApiError) throw new Error(err.message)
+      throw err
+    }
+  }
+
+  const verifyOtp = (email: string, code: string) => signInWith('/auth/verify-otp/', { email, code })
+
+  const resetPassword = (email: string, code: string, newPassword: string) =>
+    signInWith('/auth/reset-password/', { email, code, new_password: newPassword })
+
+  const requestPasswordReset = async (email: string) => {
+    try {
+      await apiFetch('/auth/forgot-password/', { method: 'POST', body: JSON.stringify({ email }) }, { auth: false })
     } catch (err) {
       if (err instanceof ApiError) throw new Error(err.message)
       throw err
@@ -131,6 +150,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const logout = () => {
+    // Tell the backend first so the tokens stop working everywhere (they're
+    // stateless; clearing them here alone would leave a copied token valid).
+    // Fire-and-forget: signing out locally mustn't wait on the network.
+    if (getAccessToken()) {
+      apiFetch('/auth/logout/', { method: 'POST' }).catch(() => {})
+    }
     setIsAuthenticated(false)
     setUser(null)
     clearTokens()
@@ -156,7 +181,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, verifyOtp, resendOtp, logout, updateUser }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, login, verifyOtp, resendOtp, requestPasswordReset, resetPassword, logout, updateUser }}>
       {isLoading ? null : children}
     </AuthContext.Provider>
   )
