@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react'
 import { User, Mail, Phone, Briefcase, Building2, MapPin, Hash, Camera, Save, X, KeyRound, Eye, EyeOff, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import { ApiError, apiFetch } from '@/lib/api'
+import { ApiError, apiFetch, setTokens } from '@/lib/api'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { UserAvatar } from '@/components/shell/user-avatar'
@@ -298,10 +298,13 @@ function ChangePasswordSection() {
     setSaving(true)
     setError('')
     try {
-      await apiFetch('/auth/change-password/', {
+      // The backend ends every other session and hands this one new tokens.
+      const tokens = await apiFetch<{ access: string; refresh: string } | undefined>('/auth/change-password/', {
         method: 'POST',
         body: JSON.stringify({ current_password: current, new_password: next }),
       })
+      // (an older backend answers 204 with no tokens: keep the current ones)
+      if (tokens?.access && tokens?.refresh) setTokens(tokens.access, tokens.refresh)
       reset()
       setOpen(false)
       setDone(true)

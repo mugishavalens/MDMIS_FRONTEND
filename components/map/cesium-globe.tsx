@@ -907,12 +907,12 @@ function showInfoOverlay(site: DetectionSite & { dataSource?: string }) {
       </div>
       ${credit}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-bottom:14px;">
-        ${row('Mineral', `<span style="color:${mineralColor}">${site.primaryMineral}</span>`)}
-        ${row('Grade', `${site.gradePct}%`)}
-        ${row('Depth', `${site.depthMeters}m`)}
-        ${row('AI Conf.', `${site.confidence}%`)}
-        ${row('Safety', `${site.safetyScore}/100`)}
-        ${row('Status', STATUS_LABEL[site.status])}
+        ${row('Mineral', `<span style="color:${mineralColor}">${escapeHtml(site.primaryMineral)}</span>`)}
+        ${row('Grade', `${escapeHtml(site.gradePct)}%`)}
+        ${row('Depth', `${escapeHtml(site.depthMeters)}m`)}
+        ${row('AI Conf.', `${escapeHtml(site.confidence)}%`)}
+        ${row('Safety', `${escapeHtml(site.safetyScore)}/100`)}
+        ${row('Status', escapeHtml(STATUS_LABEL[site.status] ?? site.status))}
       </div>
       <button id="cesium-overlay-inspect" style="
         width:100%; background:linear-gradient(135deg,#e6b84d,#c9962a);
@@ -933,6 +933,7 @@ function showInfoOverlay(site: DetectionSite & { dataSource?: string }) {
   })
 }
 
+// value must already be escaped (escapeHtml) or be markup built from escaped parts
 function row(label: string, value: string) {
   return `
     <div style="display:flex;flex-direction:column;gap:1px;">

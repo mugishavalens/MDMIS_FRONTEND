@@ -69,6 +69,10 @@ function extractMessage(body: unknown): string {
   if (body && typeof body === 'object') {
     const obj = body as Record<string, unknown>
     if (typeof obj.detail === 'string') return obj.detail
+    // FastAPI validation errors: detail = [{ msg: "Value error, ...", ... }]
+    if (Array.isArray(obj.detail) && obj.detail[0] && typeof obj.detail[0].msg === 'string') {
+      return (obj.detail[0].msg as string).replace(/^Value error, /, '')
+    }
     const firstKey = Object.keys(obj)[0]
     if (firstKey) {
       const val = obj[firstKey]

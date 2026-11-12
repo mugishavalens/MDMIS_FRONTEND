@@ -242,7 +242,7 @@ export default function LoginPage() {
                     className="rounded border-border"
                   /> Remember me
                 </label>
-                <a href="#" className="text-primary hover:underline font-medium">Forgot password?</a>
+                <Link href="/forgot-password" className="text-primary hover:underline font-medium">Forgot password?</Link>
               </div>
 
               <button
