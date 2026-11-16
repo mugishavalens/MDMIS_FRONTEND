@@ -323,6 +323,9 @@ export function CesiumExplorer() {
                 <h3 className="truncate text-sm font-semibold text-foreground">{selected.name}</h3>
                 <p className="font-mono text-xs text-muted-foreground">{selected.id} · {selected.district}</p>
                 <DataSourceCredit source={(selected as Site).dataSource} className="mt-0.5" />
+                {(selected as Site).isShared && (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">Demo site · shared with every organisation</p>
+                )}
               </div>
               <StatusPill tone={riskTone(selected.riskLevel)}>{RISK_META[selected.riskLevel].label}</StatusPill>
             </div>
