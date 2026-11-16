@@ -6,6 +6,8 @@ export interface Site extends DetectionSite {
   // Attribution for sites imported from outside data, e.g.
   // "IPIS open data (ODC-BY 1.0)"; empty for MDMIS's own sites.
   dataSource?: string
+  // A demo site shared read-only with every organisation.
+  isShared?: boolean
 }
 
 // Backend stores minerals lowercase ("cassiterite"); MINERAL_META and the
