@@ -9,7 +9,11 @@ import { IDLE_MINUTES } from '@/components/shell/session-timeout'
 import { takeSignOutReason, type SignOutReason } from '@/lib/session-reason'
 import { BrandMark } from '@/components/shell/brand-mark'
 
-const REMEMBER_KEY = 'mdmis_remembered_credentials'
+// Only the email is remembered — never the password, which anything able to
+// read localStorage (an injected script, anyone at the computer) could take.
+const REMEMBER_KEY = 'mdmis_remembered_email'
+// Older builds stored { email, password } here; it's migrated and wiped.
+const LEGACY_REMEMBER_KEY = 'mdmis_remembered_credentials'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -28,18 +32,26 @@ export default function LoginPage() {
   // Explain an automatic sign-out (inactivity or expired session), once.
   useEffect(() => { setSignedOut(takeSignOutReason()) }, [])
 
-  // Pre-fill from a previously remembered login, if any.
+  // Pre-fill the email from a previously remembered login, if any.
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(REMEMBER_KEY)
+      let saved = localStorage.getItem(REMEMBER_KEY)
+      const legacy = localStorage.getItem(LEGACY_REMEMBER_KEY)
+      if (legacy) {
+        localStorage.removeItem(LEGACY_REMEMBER_KEY)
+        try {
+          saved = saved ?? JSON.parse(legacy).email ?? null
+          if (saved) localStorage.setItem(REMEMBER_KEY, saved)
+        } catch {
+          // malformed legacy entry: dropping it is enough
+        }
+      }
       if (saved) {
-        const { email: savedEmail, password: savedPassword } = JSON.parse(saved)
-        setEmail(savedEmail ?? '')
-        setPassword(savedPassword ?? '')
+        setEmail(saved)
         setRememberMe(true)
       }
     } catch {
-      // ignore malformed/inaccessible storage
+      // ignore inaccessible storage
     }
   }, [])
 
@@ -50,10 +62,11 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const result = await login(email, password)
-      if (rememberMe) {
-        localStorage.setItem(REMEMBER_KEY, JSON.stringify({ email, password }))
-      } else {
-        localStorage.removeItem(REMEMBER_KEY)
+      try {
+        if (rememberMe) localStorage.setItem(REMEMBER_KEY, email)
+        else localStorage.removeItem(REMEMBER_KEY)
+      } catch {
+        // storage blocked (private window): signing in still works
       }
       if (result.verified) {
         router.push('/dashboard')
