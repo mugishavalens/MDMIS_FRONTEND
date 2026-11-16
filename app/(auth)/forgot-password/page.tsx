@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, ArrowRight, KeyRound, Lock } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { BrandMark } from '@/components/shell/brand-mark'
+import { ResendCodeButton } from '@/components/auth/resend-code-button'
 
 const INPUT =
   'w-full rounded-xl border border-border bg-secondary/60 px-4 py-3.5 text-[15px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all'
@@ -198,9 +199,7 @@ export default function ForgotPasswordPage() {
                 )}
               </button>
               <div className="flex items-center justify-center text-sm">
-                <button type="button" onClick={handleResend} className="text-primary hover:underline font-medium">
-                  Resend code
-                </button>
+                <ResendCodeButton onResend={handleResend} />
               </div>
             </form>
           </>

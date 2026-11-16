@@ -7,6 +7,7 @@ import { Eye, EyeOff, ArrowRight, CheckCircle2, XCircle, Lock } from 'lucide-rea
 import { apiFetch, ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { BrandMark } from '@/components/shell/brand-mark'
+import { ResendCodeButton } from '@/components/auth/resend-code-button'
 
 const ROLE_LABELS: Record<string, string> = {
   geologist: 'Geologist',
@@ -164,9 +165,7 @@ function AcceptInviteForm() {
               </button>
 
               <div className="flex items-center justify-center text-sm">
-                <button type="button" onClick={handleResend} className="text-primary hover:underline font-medium">
-                  Resend code
-                </button>
+                <ResendCodeButton onResend={handleResend} />
               </div>
             </form>
           </div>
