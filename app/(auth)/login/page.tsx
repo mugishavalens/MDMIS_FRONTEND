@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth-context'
 import { IDLE_MINUTES } from '@/components/shell/session-timeout'
 import { takeSignOutReason, type SignOutReason } from '@/lib/session-reason'
 import { BrandMark } from '@/components/shell/brand-mark'
+import { ResendCodeButton } from '@/components/auth/resend-code-button'
 
 // Only the email is remembered — never the password, which anything able to
 // read localStorage (an injected script, anyone at the computer) could take.
@@ -325,9 +326,7 @@ export default function LoginPage() {
                 <button type="button" onClick={() => { setStep('credentials'); setCode(''); setError('') }} className="text-muted-foreground hover:text-foreground transition-colors">
                   ← Use a different account
                 </button>
-                <button type="button" onClick={handleResend} className="text-primary hover:underline font-medium">
-                  Resend code
-                </button>
+                <ResendCodeButton onResend={handleResend} />
               </div>
             </form>
           )}

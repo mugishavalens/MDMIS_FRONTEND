@@ -8,6 +8,7 @@ import { motion } from 'framer-motion'
 import { apiFetch, ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { BrandMark } from '@/components/shell/brand-mark'
+import { ResendCodeButton } from '@/components/auth/resend-code-button'
 
 // Self-registration always creates a new Organisation + its org_admin — no
 // role picker. The org_admin invites teammates (geologist, compliance
@@ -153,9 +154,7 @@ export default function RegisterPage() {
               <button type="button" onClick={() => { setStep('form'); setCode(''); setError('') }} className="text-muted-foreground hover:text-foreground transition-colors">
                 ← Edit details
               </button>
-              <button type="button" onClick={handleResend} className="text-primary hover:underline font-medium">
-                Resend code
-              </button>
+              <ResendCodeButton onResend={handleResend} />
             </div>
           </form>
 
