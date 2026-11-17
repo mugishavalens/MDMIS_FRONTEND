@@ -29,7 +29,8 @@ import {
 import { ProfileDropdown } from '@/components/shell/profile-dropdown'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { useAuth } from '@/lib/auth-context'
-import { KPIS, MINERAL_META } from '@/lib/mdmis-data'
+import { MINERAL_META } from '@/lib/mdmis-data'
+import { fetchPublicStats, type PublicStats } from '@/lib/api/dashboard'
 import { BrandMark } from '@/components/shell/brand-mark'
 
 const videos = {
@@ -49,14 +50,19 @@ const navLinks = [
   { href: '#contact', label: 'Contact' },
 ]
 
-const stats = [
-  { label: 'Active Sites', value: `${KPIS.activeSites}/${KPIS.totalSites}`, icon: Radio },
-  { label: 'AI Confidence', value: `${KPIS.avgConfidence}%`, icon: Cpu },
-  { label: 'Reserve Tonnes', value: `${(KPIS.estimatedReserveTonnes / 1000).toFixed(0)}k t`, icon: Layers3 },
-  { label: 'Compliant Lots', value: `${KPIS.compliantLotsPct}%`, icon: FileCheck2 },
+// Live platform totals from /dashboard/public-stats; "—" until they load
+// (or if the backend can't be reached), never invented numbers.
+type LiveStats = PublicStats | null
+const NO_DATA = '—'
+
+const buildStats = (k: LiveStats) => [
+  { label: 'Active Sites', value: k ? `${k.activeSites}/${k.totalSites}` : NO_DATA, icon: Radio },
+  { label: 'AI Confidence', value: k ? `${k.avgConfidence}%` : NO_DATA, icon: Cpu },
+  { label: 'Reserve Tonnes', value: k ? `${(k.estimatedReserveTonnes / 1000).toFixed(0)}k t` : NO_DATA, icon: Layers3 },
+  { label: 'Compliant Lots', value: k ? `${k.compliantLotsPct}%` : NO_DATA, icon: FileCheck2 },
 ]
 
-const chapters = [
+const buildChapters = (k: LiveStats) => [
   {
     kicker: '01 Terrain Intelligence',
     title: 'See mineral potential before heavy extraction begins.',
@@ -73,7 +79,7 @@ const chapters = [
     video: videos.sensing,
     icon: ScanLine,
     color: 'text-primary',
-    detail: `${KPIS.avgConfidence}% average detection confidence`,
+    detail: k ? `${k.avgConfidence}% average detection confidence` : 'Confidence scored on every detection',
   },
   {
     kicker: '03 Chain Of Custody',
@@ -100,7 +106,7 @@ const chapters = [
     video: videos.compliance,
     icon: ShieldCheck,
     color: 'text-accent',
-    detail: `${KPIS.compliantLotsPct}% of lots fully compliant`,
+    detail: k ? `${k.compliantLotsPct}% of lots fully compliant` : 'Compliance checked on every lot',
   },
   {
     kicker: '06 Secure Operations',
@@ -113,7 +119,7 @@ const chapters = [
   },
 ]
 
-const features = [
+const buildFeatures = (k: LiveStats) => [
   {
     icon: Globe2,
     title: '3D Subsurface Mapping',
@@ -126,7 +132,7 @@ const features = [
     title: 'AI Mineral Classification',
     desc: 'Detection confidence, sensor provenance and anomaly clustering for faster exploration decisions.',
     video: videos.sensing,
-    metric: `${KPIS.avgConfidence}% avg`,
+    metric: k ? `${k.avgConfidence}% avg` : 'Scored',
   },
   {
     icon: Link2,
@@ -147,7 +153,7 @@ const features = [
     title: 'Compliance Engine',
     desc: 'Automated checks for OECD due diligence, ITSCI records and Rwanda licensing workflows.',
     video: videos.compliance,
-    metric: `${KPIS.compliantLotsPct}% lots`,
+    metric: k ? `${k.compliantLotsPct}% lots` : 'Automated',
   },
   {
     icon: Shield,
@@ -193,11 +199,11 @@ const roles = [
   },
 ]
 
-const aboutStats = [
+const buildAboutStats = (k: LiveStats) => [
   { label: 'Founded', value: '2023' },
-  { label: 'Mine Sites Onboarded', value: `${KPIS.totalSites}` },
+  { label: 'Mine Sites Onboarded', value: k ? `${k.totalSites}` : NO_DATA },
   { label: 'Team Members', value: '42' },
-  { label: 'Districts Covered', value: '12' },
+  { label: 'Districts Covered', value: k ? `${k.districtsCovered}` : NO_DATA },
 ]
 
 const aboutValues = [
@@ -290,10 +296,15 @@ function VideoLayer({
 function CountUp({ value }: { value: string }) {
   const ref = useRef<HTMLSpanElement>(null)
   const isInView = useInView(ref, { once: true, margin: '-80px' })
-  const [display, setDisplay] = useState(value.includes('/') ? value : '0')
+  const animate = /\d/.test(value) && !value.includes('/')
+  const [display, setDisplay] = useState(animate ? '0' : value)
 
   useEffect(() => {
-    if (!isInView || value.includes('/')) return
+    if (!animate) {
+      setDisplay(value)
+      return
+    }
+    if (!isInView) return
 
     const target = Number.parseFloat(value.replace(/[^0-9.]/g, ''))
     const suffix = value.replace(/[0-9.]/g, '')
@@ -310,12 +321,12 @@ function CountUp({ value }: { value: string }) {
 
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
-  }, [isInView, value])
+  }, [isInView, value, animate])
 
   return <span ref={ref}>{display}</span>
 }
 
-function StatTile({ label, value, icon: Icon, index }: (typeof stats)[number] & { index: number }) {
+function StatTile({ label, value, icon: Icon, index }: ReturnType<typeof buildStats>[number] & { index: number }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 22 }}
@@ -336,7 +347,7 @@ function StatTile({ label, value, icon: Icon, index }: (typeof stats)[number] & 
   )
 }
 
-function FeatureCard({ feature, index }: { feature: (typeof features)[number]; index: number }) {
+function FeatureCard({ feature, index }: { feature: ReturnType<typeof buildFeatures>[number]; index: number }) {
   const Icon = feature.icon
 
   return (
@@ -375,7 +386,7 @@ function IntelligenceTile({
   active,
   onActivate,
 }: {
-  chapter: (typeof chapters)[number]
+  chapter: ReturnType<typeof buildChapters>[number]
   index: number
   active: boolean
   onActivate: () => void
@@ -508,6 +519,18 @@ export function LandingPage() {
   const progressScale = useTransform(scrollYProgress, [0, 1], [0, 1])
   const featureHoverTimer = useRef<number | undefined>(undefined)
   const chapterHoverTimer = useRef<number | undefined>(undefined)
+  const [liveStats, setLiveStats] = useState<LiveStats>(null)
+
+  useEffect(() => {
+    fetchPublicStats().then(setLiveStats).catch(() => {
+      // backend unreachable: the page keeps its "—" placeholders
+    })
+  }, [])
+
+  const stats = useMemo(() => buildStats(liveStats), [liveStats])
+  const chapters = useMemo(() => buildChapters(liveStats), [liveStats])
+  const features = useMemo(() => buildFeatures(liveStats), [liveStats])
+  const aboutStats = useMemo(() => buildAboutStats(liveStats), [liveStats])
 
   const handleFeatureHover = (index: number) => {
     window.clearTimeout(featureHoverTimer.current)
