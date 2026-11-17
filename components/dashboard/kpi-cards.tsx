@@ -1,19 +1,47 @@
 'use client'
 
 import Link from 'next/link'
-import { Radar, ScanLine, Layers, ShieldAlert, TrendingUp, TrendingDown } from 'lucide-react'
+import { Radar, ScanLine, Layers, ShieldAlert, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { fmtNumber } from '@/lib/mdmis-data'
-import { type DashboardSummary } from '@/lib/api/dashboard'
+import { type DashboardSummary, type KpiTrends } from '@/lib/api/dashboard'
 import { useDashboardSummary } from '@/lib/dashboard-context'
 import { cn } from '@/lib/utils'
 
-// These 4 trend strings have no real backing data source (no "permits"
-// concept, no historical baseline to compare "vs. previous" against, no
-// audit-tracking domain) — left as static copy rather than faking numbers.
-const TRENDS = ['+2 new permits', '+18% vs. previous', '+4.1% revised NI 43-101', '1 critical audit']
+type Tone = 'good' | 'bad' | 'flat'
+
+// Each badge is computed from the summary's real trends; when nothing moved
+// it says so in a neutral tone rather than showing an arrow.
+function buildTrends(t: KpiTrends): { text: string; tone: Tone }[] {
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+  let scans: { text: string; tone: Tone }
+  if (t.scansLast7d === 0 && t.scansPrev7d === 0) scans = { text: 'No scans in 14 days', tone: 'flat' }
+  else if (t.scansPrev7d === 0) scans = { text: `${plural(t.scansLast7d, 'scan')} this week`, tone: 'good' }
+  else {
+    const pct = Math.round(((t.scansLast7d - t.scansPrev7d) / t.scansPrev7d) * 100)
+    scans = {
+      text: pct === 0 ? 'Same as last week' : `${pct > 0 ? '+' : ''}${pct}% vs last week`,
+      tone: pct > 0 ? 'good' : pct < 0 ? 'bad' : 'flat',
+    }
+  }
+
+  return [
+    t.sitesAdded30d > 0
+      ? { text: `+${plural(t.sitesAdded30d, 'site')} in 30 days`, tone: 'good' }
+      : { text: 'No new sites in 30 days', tone: 'flat' },
+    scans,
+    t.zonesDetected30d > 0
+      ? { text: `+${plural(t.zonesDetected30d, 'zone')} in 30 days`, tone: 'good' }
+      : { text: 'No new zones in 30 days', tone: 'flat' },
+    t.nonCompliantLots > 0
+      ? { text: `${plural(t.nonCompliantLots, 'non-compliant lot')}`, tone: 'bad' }
+      : { text: 'All lots compliant', tone: 'good' },
+  ]
+}
 
 function buildCards(k: DashboardSummary) {
+  const trends = buildTrends(k.trends)
   return [
     {
       label: 'Active geophysical survey sites',
@@ -22,8 +50,7 @@ function buildCards(k: DashboardSummary) {
       icon: Radar,
       href: '/map',
       hint: 'Open Intelligence Explorer to see every site on the map',
-      trend: TRENDS[0],
-      up: true,
+      trend: trends[0],
     },
     {
       label: 'Multi-sensor scans processed',
@@ -32,8 +59,7 @@ function buildCards(k: DashboardSummary) {
       icon: ScanLine,
       href: '/scans',
       hint: 'Open Survey Analysis to see the scans and their classifications',
-      trend: TRENDS[1],
-      up: true,
+      trend: trends[1],
     },
     {
       label: 'Indicated mineral reserves',
@@ -42,8 +68,7 @@ function buildCards(k: DashboardSummary) {
       icon: Layers,
       href: '/scans',
       hint: 'Open Survey Analysis to see the zones behind these reserves',
-      trend: TRENDS[2],
-      up: true,
+      trend: trends[2],
     },
     {
       label: 'Non-compliant / flagged sites',
@@ -52,8 +77,7 @@ function buildCards(k: DashboardSummary) {
       icon: ShieldAlert,
       href: '/compliance',
       hint: 'Open Regulatory Compliance to review flagged lots',
-      trend: TRENDS[3],
-      up: false,
+      trend: trends[3],
     },
   ]
 }
@@ -86,11 +110,15 @@ export function KpiCards() {
                   <span
                     className={cn(
                       'flex items-center gap-1 text-xs font-medium transition-all',
-                      c.up ? 'text-[var(--success)]' : 'text-destructive',
+                      c.trend.tone === 'good' && 'text-[var(--success)]',
+                      c.trend.tone === 'bad' && 'text-destructive',
+                      c.trend.tone === 'flat' && 'text-muted-foreground',
                     )}
                   >
-                    {c.up ? <TrendingUp className="size-3.5" /> : <TrendingDown className="size-3.5" />}
-                    {c.trend}
+                    {c.trend.tone === 'good' ? <TrendingUp className="size-3.5" />
+                      : c.trend.tone === 'bad' ? <TrendingDown className="size-3.5" />
+                      : <Minus className="size-3.5" />}
+                    {c.trend.text}
                   </span>
                 </div>
                 <p className="mt-4 text-3xl font-semibold tracking-tight text-foreground transition-colors group-hover:text-primary">{c.value}</p>
