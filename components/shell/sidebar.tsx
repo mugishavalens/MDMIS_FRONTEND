@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, Globe2, ScanLine, Link2, Truck, ShieldCheck, Settings, Satellite, HardHat, PanelLeftClose, PanelLeftOpen,
+  LayoutDashboard, Globe2, ScanLine, Link2, Truck, ShieldCheck, Settings, Satellite, HardHat, Plane, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth-context'
@@ -18,6 +18,7 @@ const ALL_NAV = [
   { href: '/map', label: 'Intelligence Explorer', icon: Globe2 },
   { href: '/scans', label: 'Survey Analysis', icon: ScanLine },
   { href: '/sensors', label: 'Sensor Data', icon: Satellite },
+  { href: '/drone-surveys', label: 'Drone Surveys', icon: Plane },
   { href: '/traceability', label: 'Chain of Custody', icon: Link2 },
   { href: '/transport', label: 'Fleet Management', icon: Truck },
   { href: '/compliance', label: 'Regulatory Compliance', icon: ShieldCheck },

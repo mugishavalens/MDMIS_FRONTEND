@@ -27,6 +27,11 @@ export interface DemGrid {
   elevations: number[][] // row-major: [lat index][lon index]
   minElevation: number
   maxElevation: number
+  // set when the grid comes from a drone survey (backend drone_surveys):
+  // its orthophoto replaces the satellite texture, and surfaceElevations
+  // is the same grid with trees/boulders kept
+  droneSurveyId?: string
+  surfaceElevations?: number[][]
 }
 
 /**
