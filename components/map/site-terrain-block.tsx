@@ -15,6 +15,7 @@ import { MINERAL_HEX, STRATA_PRESETS, getSiteTerrain } from '@/lib/site-terrain'
 import { buildWallsAndBottom } from '@/lib/terrain-geometry'
 import { useDemTerrain } from '@/lib/use-dem-terrain'
 import { useSatelliteTexture } from '@/lib/use-satellite-texture'
+import { fetchOrthoUrl } from '@/lib/api/drone-surveys'
 import { seedFromString } from '@/lib/noise'
 
 // ── CONSTANTS ──────────────────────────────────────────────────────────────
@@ -35,6 +36,28 @@ const XRAY_SURFACE_OPACITY = 0.45
 
 // ──TERRAIN GENERATION ──────────────────────────────────────────────────────
 
+function useDroneOrtho(surveyId: string | undefined): THREE.Texture | null {
+  const [tex, setTex] = useState<THREE.Texture | null>(null)
+  useEffect(() => {
+    setTex(null)
+    if (!surveyId) return
+    let live = true
+    let url: string | null = null
+    fetchOrthoUrl(surveyId)
+      .then((u) => {
+        url = u
+        new THREE.TextureLoader().load(u, (t) => {
+          if (!live) return t.dispose()
+          t.colorSpace = THREE.SRGBColorSpace
+          setTex(t)
+        })
+      })
+      .catch(() => {}) // falls back to the satellite texture
+    return () => { live = false; if (url) URL.revokeObjectURL(url) }
+  }, [surveyId])
+  return tex
+}
+
 interface TerrainSceneProps {
   site: DetectionSite
   xray: boolean
@@ -49,7 +72,9 @@ function TerrainScene({ site, xray, resetSignal, controlsRef }: TerrainSceneProp
   // Load satellite texture (DEM will fail gracefully)
   const demTerrain = useDemTerrain(site, 32)
   const satelliteData = useSatelliteTexture(site, 2)
-  const tex = satelliteData.status === 'ready' ? satelliteData.texture : null
+  const droneTex = useDroneOrtho(demTerrain.status === 'ready' ? demTerrain.demGrid?.droneSurveyId : undefined)
+  // a drone survey's own orthophoto covers exactly its terrain grid
+  const tex = droneTex ?? (satelliteData.status === 'ready' ? satelliteData.texture : null)
 
   // Build terrain mesh. Real elevations when the site has terrain (MDMIS
   // ingested DTM via the backend, else Open-Elevation); procedural noise

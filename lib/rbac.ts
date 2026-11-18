@@ -71,9 +71,9 @@ export const ROLE_THEME: Record<Role, { tone: RoleTone; text: string; bg: string
 
 // Nav items visible per role - updated for unified map experience
 export const ROLE_NAV: Record<Role, string[]> = {
-  geologist: ['/dashboard', '/map', '/scans', '/sensors', '/traceability', '/safety'],
-  mine_manager: ['/dashboard', '/map', '/scans', '/sensors', '/traceability', '/transport', '/compliance', '/safety'],
+  geologist: ['/dashboard', '/map', '/scans', '/sensors', '/drone-surveys', '/traceability', '/safety'],
+  mine_manager: ['/dashboard', '/map', '/scans', '/sensors', '/drone-surveys', '/traceability', '/transport', '/compliance', '/safety'],
   compliance_manager: ['/dashboard', '/compliance', '/traceability', '/transport', '/scans', '/sensors', '/safety'],
-  org_admin: ['/dashboard', '/map', '/scans', '/sensors', '/traceability', '/transport', '/compliance', '/admin', '/safety'],
-  system_admin: ['/dashboard', '/map', '/scans', '/sensors', '/traceability', '/transport', '/compliance', '/admin', '/safety'],
+  org_admin: ['/dashboard', '/map', '/scans', '/sensors', '/drone-surveys', '/traceability', '/transport', '/compliance', '/admin', '/safety'],
+  system_admin: ['/dashboard', '/map', '/scans', '/sensors', '/drone-surveys', '/traceability', '/transport', '/compliance', '/admin', '/safety'],
 }
