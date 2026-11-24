@@ -38,6 +38,37 @@ interface Props {
 /**
  * Robust loader that guarantees Cesium global is fully loaded and ready in the browser.
  */
+// Esri World Imagery answers zoom levels it has no photos for (rural Rwanda
+// beyond level 18, for example) with a grey "Map data not yet available"
+// tile instead of an error, and Cesium would drape that over the globe.
+// DiscardMissingTileImagePolicy compares each tile with a known-missing one
+// (open Atlantic at level 19) and drops matches, so Cesium keeps showing the
+// sharpest real imagery, magnified. Areas with level-19 photos (central
+// Kigali) keep them.
+const ESRI_WORLD_IMAGERY = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+const ESRI_MISSING_TILE = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/19/307979/233016'
+
+function esriWorldImagery(Cesium: any) {
+  return new Cesium.UrlTemplateImageryProvider({
+    url: ESRI_WORLD_IMAGERY,
+    maximumLevel: 19,
+    credit: 'Esri World Imagery',
+    tileDiscardPolicy: esriMissingTilePolicy(Cesium),
+  })
+}
+
+/** Drops Esri's "Map data not yet available" tile; World Imagery and NatGeo serve the same one. */
+function esriMissingTilePolicy(Cesium: any) {
+  return new Cesium.DiscardMissingTileImagePolicy({
+    missingImageUrl: ESRI_MISSING_TILE,
+    pixelsToCheck: [
+      new Cesium.Cartesian2(0, 0), new Cesium.Cartesian2(40, 200), new Cesium.Cartesian2(128, 128),
+      new Cesium.Cartesian2(200, 40), new Cesium.Cartesian2(255, 255),
+    ],
+    disableCheckIfAllPixelsAreTransparent: true,
+  })
+}
+
 function ensureCesium(): Promise<any> {
   return new Promise((resolve, reject) => {
     if (typeof window === 'undefined') return
@@ -236,11 +267,7 @@ export default function CesiumGlobe({
           scene.canvas.addEventListener('wheel', onWheelCapture, { capture: true, passive: false })
 
           // ── Add Base Imagery Layer (High-Resolution Esri World Imagery) ───
-          const defaultImagery = new Cesium.UrlTemplateImageryProvider({
-            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-            maximumLevel: 19,
-            credit: 'Esri World Imagery',
-          })
+          const defaultImagery = esriWorldImagery(Cesium)
           viewer.imageryLayers.addImageryProvider(defaultImagery)
 
           // ── Visual enhancements ───────────────────────────────────────────
@@ -512,16 +539,15 @@ export default function CesiumGlobe({
 
       let newProvider: any = null
       if (layer === 'satellite') {
-        newProvider = new Cesium.UrlTemplateImageryProvider({
-          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-          maximumLevel: 19,
-          credit: 'Esri World Imagery',
-        })
+        newProvider = esriWorldImagery(Cesium)
       } else if (layer === 'terrain') {
+        // NatGeo only has maps down to zoom 12 around Rwanda and Kivu, and
+        // answers deeper zooms with the same placeholder as World Imagery
         newProvider = new Cesium.UrlTemplateImageryProvider({
           url: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
           maximumLevel: 16,
           credit: 'National Geographic',
+          tileDiscardPolicy: esriMissingTilePolicy(Cesium),
         })
       } else if (layer === 'streets') {
         newProvider = new Cesium.UrlTemplateImageryProvider({
