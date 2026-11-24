@@ -93,6 +93,68 @@ export function getBingMapsTileUrl(x: number, y: number, z: number): string {
   return `https://t${serverNum}.tiles.virtualearth.net/tiles/a${quadkey}.jpeg?g=13213`
 }
 
+// ── Missing imagery ───────────────────────────────────────────────────────
+// Providers answer places they have no photos for with a placeholder image,
+// not an error: Bing a small PNG (its real photos are JPEG), Esri a grey
+// "Map data not yet available" JPEG. Drawn as-is they show up on the block as
+// blank or labelled squares. Each tile therefore tries Bing, then Esri, at
+// its zoom, then the same one level coarser (cropped and enlarged), so every
+// site gets the sharpest imagery that actually exists there.
+const MAX_FALLBACK_LEVELS = 4
+const esriTileUrl = (x: number, y: number, z: number) =>
+  `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`
+// open Atlantic at zoom 19: always Esri's placeholder
+const ESRI_MISSING_URL = esriTileUrl(233016, 307979, 19)
+let esriMissing: Promise<Uint8Array | null> | null = null
+
+function sameBytes(a: Uint8Array, b: Uint8Array) {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
+
+async function blobToImage(blob: Blob): Promise<HTMLImageElement> {
+  const img = new Image()
+  const url = URL.createObjectURL(blob)
+  try {
+    await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = url })
+    return img
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+/** One tile's real imagery, or null if both providers only have a placeholder. */
+async function fetchRealTile(x: number, y: number, z: number): Promise<HTMLImageElement | null> {
+  try {
+    const bing = await fetch(getBingMapsTileUrl(x, y, z))
+    if (bing.ok && (bing.headers.get('content-type') ?? '').includes('jpeg')) return await blobToImage(await bing.blob())
+  } catch { /* try Esri */ }
+  try {
+    esriMissing ??= fetch(ESRI_MISSING_URL).then(async (r) => new Uint8Array(await r.arrayBuffer())).catch(() => null)
+    const esri = await fetch(esriTileUrl(x, y, z))
+    if (!esri.ok) return null
+    const bytes = new Uint8Array(await esri.arrayBuffer())
+    const missing = await esriMissing
+    if (missing && sameBytes(bytes, missing)) return null
+    return await blobToImage(new Blob([bytes as BlobPart], { type: 'image/jpeg' }))
+  } catch {
+    return null
+  }
+}
+
+async function bestTile(
+  x: number, y: number, z: number, cache: Map<string, Promise<HTMLImageElement | null>>,
+): Promise<{ img: HTMLImageElement; levelsUp: number } | null> {
+  for (let d = 0; d <= MAX_FALLBACK_LEVELS; d++) {
+    const key = `${z - d}/${x >> d}/${y >> d}`
+    if (!cache.has(key)) cache.set(key, fetchRealTile(x >> d, y >> d, z - d))
+    const img = await cache.get(key)!
+    if (img) return { img, levelsUp: d }
+  }
+  return null
+}
+
 /**
  * Fetch satellite image tiles covering a bounding box
  * Returns a canvas with stitched tiles
@@ -123,34 +185,23 @@ export async function fetchSatelliteTiles(
   canvas.height = canvasHeight
   const ctx = canvas.getContext('2d')!
 
-  // Fetch and draw tiles
+  // Fetch and draw tiles (coarser fallback tiles are shared between neighbours)
+  const parents = new Map<string, Promise<HTMLImageElement | null>>()
   const tilePromises: Promise<void>[] = []
   for (let ty = topLeft.y; ty <= bottomRight.y; ty++) {
     for (let tx = topLeft.x; tx <= bottomRight.x; tx++) {
       const promise = (async () => {
         try {
-          const url = getBingMapsTileUrl(tx, ty, zoom)
-          const response = await fetch(url)
-          if (!response.ok) {
-            console.warn(`[Satellite] Failed to fetch tile ${tx},${ty}: ${response.status}`)
+          const found = await bestTile(tx, ty, zoom, parents)
+          if (!found) {
+            console.warn(`[Satellite] No imagery for tile ${tx},${ty} down to zoom ${zoom - MAX_FALLBACK_LEVELS}`)
             return
           }
-          const blob = await response.blob()
-          const img = new Image()
-          img.crossOrigin = 'anonymous'
-
-          await new Promise((resolve, reject) => {
-            img.onload = resolve
-            img.onerror = reject
-            img.src = URL.createObjectURL(blob)
-          })
-
-          const canvasX = (tx - topLeft.x) * 256
-          const canvasY = (ty - topLeft.y) * 256
-          ctx.drawImage(img, canvasX, canvasY, 256, 256)
-          URL.revokeObjectURL(img.src)
-
-          console.log(`[Satellite] Stitched tile ${tx},${ty}`)
+          // a coarser tile covers 2^d x 2^d of ours: draw just our part, enlarged
+          const part = 256 >> found.levelsUp
+          const sx = (tx - ((tx >> found.levelsUp) << found.levelsUp)) * part
+          const sy = (ty - ((ty >> found.levelsUp) << found.levelsUp)) * part
+          ctx.drawImage(found.img, sx, sy, part, part, (tx - topLeft.x) * 256, (ty - topLeft.y) * 256, 256, 256)
         } catch (err) {
           console.warn(`[Satellite] Error fetching tile ${tx},${ty}:`, err)
         }
