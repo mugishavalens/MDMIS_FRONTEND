@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, ArrowRight, CheckCircle2, Lock } from 'lucide-react'
@@ -26,6 +26,12 @@ export default function RegisterPage() {
   const [resent, setResent] = useState(false)
 
   function set(k: string, v: string) { setForm((p) => ({ ...p, [k]: v })) }
+
+  // The landing page's "Name your organisation" box passes the name along
+  useEffect(() => {
+    const org = new URLSearchParams(window.location.search).get('org')
+    if (org) setForm((p) => (p.organization ? p : { ...p, organization: org.slice(0, 120) }))
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
