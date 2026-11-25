@@ -154,6 +154,10 @@
 /* Chillax ascenders reach above the line box: keep headings inside their section */
 .sitesSec { margin-top: var(--gap); padding-top: 16px; }
 .sitesHead { padding-left: 3vw; max-width: 15em; }
+.live { display: flex; flex-wrap: wrap; gap: 24px 56px; margin-top: 40px; padding-left: 3vw; }
+.live div { display: flex; flex-direction: column-reverse; }
+.live dd { font-size: var(--s-head); font-weight: 600; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.live dt { margin-top: 8px; font-size: var(--s-body); color: var(--muted); }
 .sitesGrid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; margin-top: 96px; align-items: end; }
 .sitesPic { grid-column: 1 / span 4; position: relative; aspect-ratio: 4 / 5; clip-path: var(--pic-clip); }
 .sitesPic img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -282,6 +286,7 @@
   .clause { order: -1; margin-top: 0; }
   .fieldHead { margin-bottom: 16px; order: -2; }
   .sitesHead { padding-left: 0; }
+  .live { padding-left: 0; gap: 20px 32px; }
   .sitesGrid { display: flex; flex-direction: column; margin-top: 40px; align-items: stretch; }
   .sitesLabel { display: none; }
   .table { order: -1; }

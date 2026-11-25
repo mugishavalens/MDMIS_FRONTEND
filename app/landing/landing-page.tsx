@@ -10,6 +10,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
+import { fetchPublicStats, type PublicStats } from '@/lib/api/dashboard'
 import { MINERAL_LABEL, profileClip, profileSamples, sites } from './profile'
 import { SiteBlock } from './site-block'
 import s from './landing.module.css'
@@ -114,7 +115,19 @@ export function LandingPage() {
   const [org, setOrg] = useState('Rutongo Mining Cooperative')
   const [country, setCountry] = useState<'RW' | 'CD'>('RW')
   const router = useRouter()
+  const [stats, setStats] = useState<PublicStats | null>(null)
   useEntrances(root)
+
+  // Live platform totals (/dashboard/public-stats), read once per visit
+  useEffect(() => { fetchPublicStats().then(setStats).catch(() => {}) }, [])
+  // only figures that say something: a 0% before any lot or scan exists does not
+  const live: [string, string][] = stats ? [
+    [String(stats.totalSites), 'sites on MDMIS'],
+    [String(stats.activeSites), 'active now'],
+    [String(stats.districtsCovered), 'districts covered'],
+    ...(stats.compliantLotsPct > 0 ? [[`${stats.compliantLotsPct}%`, 'of lots compliant'] as [string, string]] : []),
+    ...(stats.avgConfidence > 0 ? [[`${stats.avgConfidence}%`, 'average detection confidence'] as [string, string]] : []),
+  ] : []
 
   const blocks = profileSamples(5).map((v) => 60 + v * 40)
   const sitesFor = (key: string) => sites.filter((x) => x.mineral === key).map((x) => x.name.split(' ')[0])
@@ -217,6 +230,11 @@ export function LandingPage() {
       {/* ── the sites ────────────────────────────────────── */}
       <section id="sites" className={`${s.wrap} ${s.sitesSec}`} aria-labelledby="sites-title">
         <header><h2 id="sites-title" className={`${s.head} ${s.sitesHead}`}>Ten Rwandan sites, open on day one</h2></header>
+        {live.length > 0 && (
+          <dl className={s.live} aria-label="Live platform figures">
+            {live.map(([value, label]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+          </dl>
+        )}
         <div className={s.sitesGrid}>
           <figure className={s.sitesPic} data-rise>
             <img src="/landing/img/rwanda-terraces.jpg" alt="Green terraced hills under a cloudy sky in Rwanda" width={1600} height={1067} loading="lazy" />
