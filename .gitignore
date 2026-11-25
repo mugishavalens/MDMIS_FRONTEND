@@ -21,3 +21,8 @@ yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# design working files (taste-skill) and original picture downloads
+.taste-skill/
+/assets/
+.playwright-cli/
