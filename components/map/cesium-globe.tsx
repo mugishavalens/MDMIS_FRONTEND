@@ -476,10 +476,12 @@ export default function CesiumGlobe({
   useEffect(() => {
     const viewer = viewerRef.current
     const Cesium = (globalThis as any).Cesium
-    if (!viewer || !Cesium || !selectedId) return
+    if (!viewer || !Cesium) return
+    removeInfoOverlay()
+    // selection cleared (the sidebar's open site was closed): no card, camera stays put
+    if (!selectedId) return
     const site = sites.find((s) => s.id === selectedId)
     if (!site) return
-    removeInfoOverlay()
     flyToSite(viewer, Cesium, site)
     showInfoOverlay(site)
     // eslint-disable-next-line react-hooks/exhaustive-deps
