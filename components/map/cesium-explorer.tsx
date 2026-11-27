@@ -4,20 +4,16 @@ import dynamic from 'next/dynamic'
 import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Loader2, MapPin, Layers, Gauge, ShieldAlert, Boxes,
-  Drill, Mountain, Scan, Search, X, Globe, ChevronRight,
+  Loader2, MapPin, Layers, Mountain, Scan, Search, X, Globe,
   ArrowLeft, EyeOff, RotateCcw,
 } from 'lucide-react'
-import {
-  RISK_META, MINERAL_META, fmtNumber, timeAgo,
-  type DetectionSite,
-} from '@/lib/mdmis-data'
+import { RISK_META, type DetectionSite } from '@/lib/mdmis-data'
 import { fetchSites, type Site } from '@/lib/api/sites'
 import { DataSourceCredit } from '@/components/map/data-source-credit'
 import { StatusPill } from '@/components/shell/status-pill'
-import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 import { Map3DErrorBoundary } from '@/components/map/map-3d-boundary'
+import { SiteDetails } from '@/components/map/site-details'
 import { cn } from '@/lib/utils'
 
 const CesiumGlobe = dynamic(() => import('@/components/map/cesium-globe'), {
@@ -47,20 +43,6 @@ function riskTone(level: DetectionSite['riskLevel']) {
 
 const RISK_HEX: Record<DetectionSite['riskLevel'], string> = {
   low: '#3fcf8e', moderate: '#e6b84d', high: '#f97316', critical: '#ef4444',
-}
-
-function Metric({ icon: Icon, label, value, sub }: {
-  icon: React.ElementType; label: string; value: string; sub: string
-}) {
-  return (
-    <div className="rounded-md border border-border bg-background/40 p-2.5">
-      <p className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-        <Icon className="size-3" /> {label}
-      </p>
-      <p className="mt-1 truncate text-sm font-semibold text-foreground">{value}</p>
-      <p className="truncate text-[10px] text-muted-foreground">{sub}</p>
-    </div>
-  )
 }
 
 export function CesiumExplorer() {
@@ -306,84 +288,11 @@ export function CesiumExplorer() {
               <StatusPill tone={riskTone(selected.riskLevel)}>{RISK_META[selected.riskLevel].label}</StatusPill>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
-              <Metric icon={Boxes} label="Primary mineral" value={selected.primaryMineral} sub={MINERAL_META[selected.primaryMineral]?.commodity ?? '—'} />
-              <Metric icon={Gauge} label="Ore grade" value={`${selected.gradePct}%`} sub={`${selected.confidence}% AI conf.`} />
-            </div>
-
-            <div className="rounded-md border border-border bg-background/40 p-3">
-              <div className="mb-2 flex items-center gap-2">
-                <Drill className="size-3.5 text-primary" />
-                <p className="text-xs font-medium text-foreground">Subsurface Profile</p>
-              </div>
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Depth to deposit</span>
-                  <span className="font-mono text-foreground">{selected.depthMeters}m</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Est. reserve</span>
-                  <span className="font-mono text-foreground">{fmtNumber(selected.estimatedTonnage)} t</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Geological layer</span>
-                  <span className="font-mono text-foreground">
-                    {selected.depthMeters < 30 ? 'Weathered Zone' : selected.depthMeters < 60 ? 'Saprolite' : 'Bedrock'}
-                  </span>
-                </div>
-                <div className="pt-1">
-                  <div className="relative h-1.5 overflow-hidden rounded-full bg-secondary">
-                    <div className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary via-accent to-[#9b6dff]"
-                      style={{ width: `${Math.min((selected.depthMeters / 100) * 100, 100)}%` }} />
-                  </div>
-                  <div className="mt-1 flex justify-between text-[9px] text-muted-foreground">
-                    <span>0m</span><span>50m</span><span>100m+</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5">
-              <Metric icon={Layers} label="Scan method"
-                value={selected.lastScanMethod || 'Unknown'}
-                sub={timeAgo(selected.lastScan)} />
-              <Metric icon={ShieldAlert} label="Safety score"
-                value={`${selected.safetyScore}/100`} sub={selected.safetyScore > 70 ? 'Stable' : 'Monitor'} />
-            </div>
-
-            <div>
-              <div className="mb-1.5 flex items-center justify-between text-xs">
-                <span className="flex items-center gap-1 text-muted-foreground">
-                  <ShieldAlert className="size-3" /> Stability
-                </span>
-                <span className={cn('font-mono font-semibold',
-                  selected.safetyScore >= 80 ? 'text-[var(--success)]' :
-                  selected.safetyScore >= 60 ? 'text-primary' : 'text-destructive')}>
-                  {selected.safetyScore}%
-                </span>
-              </div>
-              <Progress value={selected.safetyScore} className="h-1.5" />
-            </div>
-
-            {selected.secondaryMinerals.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {selected.secondaryMinerals.map((m) => (
-                  <span key={m} className="rounded border border-border bg-secondary/60 px-2 py-0.5 text-[10px] text-muted-foreground">
-                    + {m}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            <Button
-              className="w-full gap-2"
-              onClick={() => handleInspect(selected)}
-              disabled={viewMode === 'terrain'}
-            >
-              <Mountain className="size-3.5" />
-              {viewMode === 'terrain' ? 'Viewing Terrain Inspection' : 'Open Full Terrain Inspection'}
-              <ChevronRight className="ml-auto size-3.5" />
-            </Button>
+            <SiteDetails
+              site={selected}
+              inspecting={viewMode === 'terrain'}
+              onInspect={() => handleInspect(selected)}
+            />
           </div>
         )}
 
