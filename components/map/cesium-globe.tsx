@@ -32,7 +32,6 @@ interface Props {
   selectedId:           string | null
   onSelect:             (site: DetectionSite) => void
   onInspect:            (site: DetectionSite) => void
-  onVisibleSitesChange: (ids: string[]) => void
 }
 
 /**
@@ -130,10 +129,12 @@ export default function CesiumGlobe({
   selectedId,
   onSelect,
   onInspect,
-  onVisibleSitesChange,
 }: Props) {
   const containerRef     = useRef<HTMLDivElement>(null)
   const viewerRef        = useRef<any>(null)
+  // the Cesium click handler is registered once; it reads the current selection from here
+  const selectedRef      = useRef<string | null>(selectedId)
+  selectedRef.current    = selectedId
   const entitiesRef      = useRef<Map<string, any>>(new Map())
   const corridorsRef     = useRef<any[]>([])
   const depthPillarsRef  = useRef<any[]>([])
@@ -406,9 +407,13 @@ export default function CesiumGlobe({
             if (!picked?.id?.id) return
             const site = sites.find((s) => s.id === picked.id.id)
             if (!site) return
-            onSelect(site)
-            flyToSite(viewer, Cesium, site)
-            showInfoOverlay(site)
+            if (site.id === selectedRef.current) {
+              // already selected: nothing changes, so re-centre and reopen its card here
+              flyToSite(viewer, Cesium, site)
+              showInfoOverlay(site)
+              return
+            }
+            onSelect(site) // the selection effect below flies to it and shows its card
           }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
 
           handler.setInputAction((click: any) => {
@@ -417,12 +422,6 @@ export default function CesiumGlobe({
             const site = sites.find((s) => s.id === picked.id.id)
             if (site) onInspect(site)
           }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK)
-
-          // ── Visibility Tracking on Camera Move ────────────────────────────
-          scene.camera.changed.addEventListener(() => {
-            reportVisible(viewer, Cesium, sites, onVisibleSitesChange)
-          })
-          setTimeout(() => reportVisible(viewer, Cesium, sites, onVisibleSitesChange), 800)
 
           // ── Cursor Pointer on Hover ───────────────────────────────────────
           scene.canvas.addEventListener('mousemove', (e: MouseEvent) => {
@@ -477,10 +476,12 @@ export default function CesiumGlobe({
   useEffect(() => {
     const viewer = viewerRef.current
     const Cesium = (globalThis as any).Cesium
-    if (!viewer || !Cesium || !selectedId) return
+    if (!viewer || !Cesium) return
+    removeInfoOverlay()
+    // selection cleared (the sidebar's open site was closed): no card, camera stays put
+    if (!selectedId) return
     const site = sites.find((s) => s.id === selectedId)
     if (!site) return
-    removeInfoOverlay()
     flyToSite(viewer, Cesium, site)
     showInfoOverlay(site)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -835,39 +836,22 @@ function panCameraByScreenDelta(viewer: any, deltaX: number, deltaY: number) {
   camera.moveForward(-deltaY * moveRate)
 }
 
+/**
+ * Centre the camera on the site itself. The old flyTo put the camera directly
+ * above the site tilted 35 degrees, so it looked at ground ~12 km north of it
+ * and the site's pin was often off screen. Orbiting a bounding sphere at the
+ * site's position keeps the pin in the middle of the view. The globe uses
+ * ellipsoid terrain and the pins are clamped to it, so the site sits at height 0.
+ */
+const SITE_VIEW_RANGE_M = 2_500
+
 function flyToSite(viewer: any, Cesium: any, site: DetectionSite) {
-  viewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromDegrees(site.lng, site.lat, 8_500),
-    orientation: {
-      heading: Cesium.Math.toRadians(-20),
-      pitch:   Cesium.Math.toRadians(-35),
-      roll:    0,
-    },
+  const target = new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(site.lng, site.lat, 0), 150)
+  viewer.camera.flyToBoundingSphere(target, {
+    offset: new Cesium.HeadingPitchRange(Cesium.Math.toRadians(-20), Cesium.Math.toRadians(-45), SITE_VIEW_RANGE_M),
     duration: 2.2,
     easingFunction: Cesium.EasingFunction.QUINTIC_IN_OUT,
   })
-}
-
-function reportVisible(
-  viewer: any,
-  Cesium: any,
-  sites: DetectionSite[],
-  onVisibleSitesChange: (ids: string[]) => void,
-) {
-  if (!viewer || viewer.isDestroyed()) return
-  const camera = viewer.camera
-  const rect   = camera.computeViewRectangle(viewer.scene.globe.ellipsoid)
-  if (!rect) { onVisibleSitesChange(sites.map((s) => s.id)); return }
-
-  const west  = Cesium.Math.toDegrees(rect.west)
-  const east  = Cesium.Math.toDegrees(rect.east)
-  const south = Cesium.Math.toDegrees(rect.south)
-  const north = Cesium.Math.toDegrees(rect.north)
-
-  const visible = sites
-    .filter((s) => s.lat >= south && s.lat <= north && s.lng >= west && s.lng <= east)
-    .map((s) => s.id)
-  onVisibleSitesChange(visible.length > 0 ? visible : sites.map((s) => s.id))
 }
 
 let _currentOverlay: HTMLElement | null = null
