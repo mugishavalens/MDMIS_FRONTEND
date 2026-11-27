@@ -1,7 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Loader2, MapPin, Layers, Mountain, Scan, Search, X, Globe,
@@ -60,6 +60,23 @@ export function CesiumExplorer() {
   const [mapKey, setMapKey] = useState(0)
 
   const selected = sites.find((s) => s.id === selectedId) ?? null
+  const listRef = useRef<HTMLDivElement>(null)
+
+  // Bring the opened site to the top of the list, whether it was opened here or
+  // from its pin on the globe; runs after the dropdown has rendered, so closing
+  // the one above it can't push it out of view
+  useEffect(() => {
+    const list = listRef.current
+    if (!list || !selectedId) return
+    const raf = requestAnimationFrame(() => {
+      const row = list.querySelector<HTMLElement>(`[data-site-id="${CSS.escape(selectedId)}"]`)
+      if (!row) return
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      // the list is the rows' offset parent (position: relative), so offsetTop is already list-relative
+      list.scrollTo({ top: row.offsetTop - 8, behavior: reduce ? 'auto' : 'smooth' })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [selectedId])
 
   // Fetch real sites once
   useEffect(() => {
@@ -284,7 +301,7 @@ export function CesiumExplorer() {
         </div>
 
         {/* Site list */}
-        <div className="flex-1 overflow-y-auto p-2 scrollbar-thin">
+        <div ref={listRef} className="relative flex-1 overflow-y-auto p-2 scrollbar-thin">
           {sitesLoading ? (
             <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
               <Globe className="size-8 animate-pulse opacity-30" />
@@ -301,6 +318,7 @@ export function CesiumExplorer() {
             return (
               <div
                 key={s.id}
+                data-site-id={s.id}
                 className={cn(
                   'mb-1 rounded-md border transition-colors',
                   open ? 'border-primary/40 bg-primary/8' : 'border-transparent hover:border-border hover:bg-secondary/50',
