@@ -132,6 +132,9 @@ export default function CesiumGlobe({
 }: Props) {
   const containerRef     = useRef<HTMLDivElement>(null)
   const viewerRef        = useRef<any>(null)
+  // the Cesium click handler is registered once; it reads the current selection from here
+  const selectedRef      = useRef<string | null>(selectedId)
+  selectedRef.current    = selectedId
   const entitiesRef      = useRef<Map<string, any>>(new Map())
   const corridorsRef     = useRef<any[]>([])
   const depthPillarsRef  = useRef<any[]>([])
@@ -404,9 +407,13 @@ export default function CesiumGlobe({
             if (!picked?.id?.id) return
             const site = sites.find((s) => s.id === picked.id.id)
             if (!site) return
-            onSelect(site)
-            flyToSite(viewer, Cesium, site)
-            showInfoOverlay(site)
+            if (site.id === selectedRef.current) {
+              // already selected: nothing changes, so re-centre and reopen its card here
+              flyToSite(viewer, Cesium, site)
+              showInfoOverlay(site)
+              return
+            }
+            onSelect(site) // the selection effect below flies to it and shows its card
           }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
 
           handler.setInputAction((click: any) => {
