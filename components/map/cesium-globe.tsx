@@ -827,14 +827,19 @@ function panCameraByScreenDelta(viewer: any, deltaX: number, deltaY: number) {
   camera.moveForward(-deltaY * moveRate)
 }
 
+/**
+ * Centre the camera on the site itself. The old flyTo put the camera directly
+ * above the site tilted 35 degrees, so it looked at ground ~12 km north of it
+ * and the site's pin was often off screen. Orbiting a bounding sphere at the
+ * site's position keeps the pin in the middle of the view. The globe uses
+ * ellipsoid terrain and the pins are clamped to it, so the site sits at height 0.
+ */
+const SITE_VIEW_RANGE_M = 2_500
+
 function flyToSite(viewer: any, Cesium: any, site: DetectionSite) {
-  viewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromDegrees(site.lng, site.lat, 8_500),
-    orientation: {
-      heading: Cesium.Math.toRadians(-20),
-      pitch:   Cesium.Math.toRadians(-35),
-      roll:    0,
-    },
+  const target = new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(site.lng, site.lat, 0), 150)
+  viewer.camera.flyToBoundingSphere(target, {
+    offset: new Cesium.HeadingPitchRange(Cesium.Math.toRadians(-20), Cesium.Math.toRadians(-45), SITE_VIEW_RANGE_M),
     duration: 2.2,
     easingFunction: Cesium.EasingFunction.QUINTIC_IN_OUT,
   })
