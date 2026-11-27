@@ -5,7 +5,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Loader2, MapPin, Layers, Mountain, Scan, Search, X, Globe,
-  ArrowLeft, EyeOff, RotateCcw,
+  ArrowLeft, EyeOff, RotateCcw, ChevronDown,
 } from 'lucide-react'
 import { RISK_META, type DetectionSite } from '@/lib/mdmis-data'
 import { fetchSites, type Site } from '@/lib/api/sites'
@@ -115,6 +115,16 @@ export function CesiumExplorer() {
       setViewMode('globe')
     }
   }, [selectedId, viewMode])
+
+  // The sidebar is an accordion: one site open at a time, a second click closes it
+  const toggleSite = useCallback((site: DetectionSite) => {
+    if (site.id === selectedId) {
+      setSelectedId(null)
+      setViewMode('globe')
+      return
+    }
+    handleSelect(site)
+  }, [selectedId, handleSelect])
 
   const handleInspect = useCallback((site: DetectionSite) => {
     setSelectedId(site.id)
@@ -273,29 +283,6 @@ export function CesiumExplorer() {
           </div>
         </div>
 
-        {/* Selected site card */}
-        {selected && (
-          <div className="space-y-3 border-b border-border bg-card/40 p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <h3 className="truncate text-sm font-semibold text-foreground">{selected.name}</h3>
-                <p className="font-mono text-xs text-muted-foreground">{selected.id} · {selected.district}</p>
-                <DataSourceCredit source={(selected as Site).dataSource} className="mt-0.5" />
-                {(selected as Site).isShared && (
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">Demo site · shared with every organisation</p>
-                )}
-              </div>
-              <StatusPill tone={riskTone(selected.riskLevel)}>{RISK_META[selected.riskLevel].label}</StatusPill>
-            </div>
-
-            <SiteDetails
-              site={selected}
-              inspecting={viewMode === 'terrain'}
-              onInspect={() => handleInspect(selected)}
-            />
-          </div>
-        )}
-
         {/* Site list */}
         <div className="flex-1 overflow-y-auto p-2 scrollbar-thin">
           {sitesLoading ? (
@@ -310,51 +297,62 @@ export function CesiumExplorer() {
               <button type="button" onClick={() => setQuery('')} className="text-xs text-primary underline">Clear search</button>
             </div>
           ) : listSites.map((s) => {
-            const active = s.id === selectedId
+            const open = s.id === selectedId
             return (
               <div
                 key={s.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => handleSelect(s)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    handleSelect(s)
-                  }
-                }}
                 className={cn(
-                  'mb-1 flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors cursor-pointer select-none',
-                  active ? 'border-primary/40 bg-primary/8' : 'border-transparent hover:border-border hover:bg-secondary/50',
+                  'mb-1 rounded-md border transition-colors',
+                  open ? 'border-primary/40 bg-primary/8' : 'border-transparent hover:border-border hover:bg-secondary/50',
                 )}
               >
-                <span className="mt-0.5 size-2.5 shrink-0 rounded-full" style={{ background: RISK_HEX[s.riskLevel] }} />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1.5">
-                    <MapPin className="size-3 shrink-0 text-muted-foreground" />
-                    <span className="truncate text-sm font-medium text-foreground">{s.name}</span>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleSite(s)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      toggleSite(s)
+                    }
+                  }}
+                  className="flex w-full cursor-pointer select-none items-center gap-3 px-3 py-2.5 text-left"
+                >
+                  <span className="mt-0.5 size-2.5 shrink-0 rounded-full" style={{ background: RISK_HEX[s.riskLevel] }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <MapPin className="size-3 shrink-0 text-muted-foreground" />
+                      <span className="truncate text-sm font-medium text-foreground">{s.name}</span>
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                      {s.primaryMineral} · {s.gradePct}% · {s.district}
+                    </span>
                   </span>
-                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                    {s.primaryMineral} · {s.gradePct}% · {s.district}
+                  <span className="shrink-0 text-right">
+                    <span className="block font-mono text-xs text-foreground">{s.confidence}%</span>
+                    <span className="block text-[10px] text-muted-foreground">conf.</span>
                   </span>
-                </span>
-                <span className="shrink-0 text-right">
-                  <span className="block font-mono text-xs text-foreground">{s.confidence}%</span>
-                  <span className="block text-[10px] text-muted-foreground">conf.</span>
-                </span>
-                {active && (
-                  <button type="button"
-                    onClick={(e) => { e.stopPropagation(); handleInspect(s) }}
-                    className={cn(
-                      "shrink-0 rounded-md border p-1 transition-colors",
-                      viewMode === 'terrain'
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
-                    )}
-                    title="Inspect terrain block"
-                  >
-                    <Scan className="size-3" />
-                  </button>
+                  <ChevronDown className={cn('size-4 shrink-0 text-muted-foreground transition-transform duration-200', open && 'rotate-180')} />
+                </div>
+
+                {open && (
+                  <div className="space-y-3 px-3 pb-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-mono text-xs text-muted-foreground">{s.id} · {s.district}</p>
+                        <DataSourceCredit source={s.dataSource} className="mt-0.5" />
+                        {s.isShared && (
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">Demo site · shared with every organisation</p>
+                        )}
+                      </div>
+                      <StatusPill tone={riskTone(s.riskLevel)}>{RISK_META[s.riskLevel].label}</StatusPill>
+                    </div>
+                    <SiteDetails
+                      site={s}
+                      inspecting={viewMode === 'terrain'}
+                      onInspect={() => handleInspect(s)}
+                    />
+                  </div>
                 )}
               </div>
             )
