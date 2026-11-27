@@ -68,7 +68,6 @@ export function CesiumExplorer() {
   const [sites, setSites] = useState<Site[]>([])
   const [sitesLoading, setSitesLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [visibleIds, setVisibleIds] = useState<string[]>([])
   const [globeKey, setGlobeKey] = useState(0)
   const [query, setQuery] = useState('')
 
@@ -89,11 +88,6 @@ export function CesiumExplorer() {
       .finally(() => { if (!cancelled) setSitesLoading(false) })
     return () => { cancelled = true }
   }, [])
-
-  // Seed "in view" with every site until the globe reports real viewport bounds
-  useEffect(() => {
-    setVisibleIds(sites.map((s) => s.id))
-  }, [sites])
 
   // Handle URL parameters for deep linking — wait for sites to load first
   useEffect(() => {
@@ -124,28 +118,13 @@ export function CesiumExplorer() {
     return () => window.removeEventListener('cesium:inspect', handler)
   }, [])
 
-  const filteredSites = sites.filter((s) => {
-    const inView = visibleIds.includes(s.id)
-    const match =
-      query.length === 0 ||
-      s.name.toLowerCase().includes(query.toLowerCase()) ||
-      s.district.toLowerCase().includes(query.toLowerCase()) ||
-      s.primaryMineral.toLowerCase().includes(query.toLowerCase()) ||
-      s.id.toLowerCase().includes(query.toLowerCase())
-    return inView && match
-  })
-
-  const listSites =
-    filteredSites.length > 0
-      ? filteredSites
-      : query.length > 0
-      ? sites.filter((s) =>
-          s.name.toLowerCase().includes(query.toLowerCase()) ||
-          s.district.toLowerCase().includes(query.toLowerCase()) ||
-          s.primaryMineral.toLowerCase().includes(query.toLowerCase()) ||
-          s.id.toLowerCase().includes(query.toLowerCase()),
-        )
-      : sites
+  // Every site stays in the list wherever the camera is; only the search narrows it
+  const q = query.trim().toLowerCase()
+  const listSites = q
+    ? sites.filter((s) =>
+        [s.name, s.district, s.primaryMineral, s.id].some((field) => field.toLowerCase().includes(q)),
+      )
+    : sites
 
   const handleSelect  = useCallback((site: DetectionSite) => {
     setSelectedId(site.id)
@@ -159,8 +138,6 @@ export function CesiumExplorer() {
     setSelectedId(site.id)
     setViewMode('terrain')
   }, [])
-
-  const handleVisible = useCallback((ids: string[]) => setVisibleIds(ids), [])
 
   return (
     <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[1fr_320px] lg:grid-rows-1 lg:grid-cols-[1fr_340px]">
@@ -190,7 +167,6 @@ export function CesiumExplorer() {
               selectedId={selectedId}
               onSelect={handleSelect}
               onInspect={handleInspect}
-              onVisibleSitesChange={handleVisible}
             />
           )}
         </Map3DErrorBoundary>
@@ -293,7 +269,7 @@ export function CesiumExplorer() {
         <div className="space-y-2.5 border-b border-border px-3 py-3">
           <div className="flex items-center justify-between">
             <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-              {query ? 'Search results' : visibleIds.length < sites.length ? `In view (${visibleIds.length})` : 'All sites'}
+              {q ? 'Search results' : 'All sites'}
             </p>
             <span className="rounded-full bg-secondary/60 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
               {listSites.length}/{sites.length}

@@ -32,7 +32,6 @@ interface Props {
   selectedId:           string | null
   onSelect:             (site: DetectionSite) => void
   onInspect:            (site: DetectionSite) => void
-  onVisibleSitesChange: (ids: string[]) => void
 }
 
 /**
@@ -130,7 +129,6 @@ export default function CesiumGlobe({
   selectedId,
   onSelect,
   onInspect,
-  onVisibleSitesChange,
 }: Props) {
   const containerRef     = useRef<HTMLDivElement>(null)
   const viewerRef        = useRef<any>(null)
@@ -417,12 +415,6 @@ export default function CesiumGlobe({
             const site = sites.find((s) => s.id === picked.id.id)
             if (site) onInspect(site)
           }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK)
-
-          // ── Visibility Tracking on Camera Move ────────────────────────────
-          scene.camera.changed.addEventListener(() => {
-            reportVisible(viewer, Cesium, sites, onVisibleSitesChange)
-          })
-          setTimeout(() => reportVisible(viewer, Cesium, sites, onVisibleSitesChange), 800)
 
           // ── Cursor Pointer on Hover ───────────────────────────────────────
           scene.canvas.addEventListener('mousemove', (e: MouseEvent) => {
@@ -846,28 +838,6 @@ function flyToSite(viewer: any, Cesium: any, site: DetectionSite) {
     duration: 2.2,
     easingFunction: Cesium.EasingFunction.QUINTIC_IN_OUT,
   })
-}
-
-function reportVisible(
-  viewer: any,
-  Cesium: any,
-  sites: DetectionSite[],
-  onVisibleSitesChange: (ids: string[]) => void,
-) {
-  if (!viewer || viewer.isDestroyed()) return
-  const camera = viewer.camera
-  const rect   = camera.computeViewRectangle(viewer.scene.globe.ellipsoid)
-  if (!rect) { onVisibleSitesChange(sites.map((s) => s.id)); return }
-
-  const west  = Cesium.Math.toDegrees(rect.west)
-  const east  = Cesium.Math.toDegrees(rect.east)
-  const south = Cesium.Math.toDegrees(rect.south)
-  const north = Cesium.Math.toDegrees(rect.north)
-
-  const visible = sites
-    .filter((s) => s.lat >= south && s.lat <= north && s.lng >= west && s.lng <= east)
-    .map((s) => s.id)
-  onVisibleSitesChange(visible.length > 0 ? visible : sites.map((s) => s.id))
 }
 
 let _currentOverlay: HTMLElement | null = null
