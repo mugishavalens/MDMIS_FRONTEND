@@ -301,7 +301,18 @@ export function CesiumExplorer() {
         </div>
 
         {/* Site list */}
-        <div ref={listRef} className="relative flex-1 overflow-y-auto p-2 scrollbar-thin">
+        <div
+          ref={listRef}
+          className="relative flex-1 overflow-y-auto p-2 scrollbar-thin"
+          onKeyDown={(e) => {
+            // Escape closes the open site from anywhere in the list and returns focus to its row
+            if (e.key !== 'Escape' || !selected) return
+            e.preventDefault()
+            const id = selected.id
+            toggleSite(selected)
+            requestAnimationFrame(() => document.getElementById(`site-${id}-toggle`)?.focus())
+          }}
+        >
           {sitesLoading ? (
             <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
               <Globe className="size-8 animate-pulse opacity-30" />
@@ -324,17 +335,13 @@ export function CesiumExplorer() {
                   open ? 'border-primary/40 bg-primary/8' : 'border-transparent hover:border-border hover:bg-secondary/50',
                 )}
               >
-                <div
-                  role="button"
-                  tabIndex={0}
+                <button
+                  type="button"
+                  id={`site-${s.id}-toggle`}
+                  aria-expanded={open}
+                  aria-controls={`site-${s.id}-details`}
                   onClick={() => toggleSite(s)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      toggleSite(s)
-                    }
-                  }}
-                  className="flex w-full cursor-pointer select-none items-center gap-3 px-3 py-2.5 text-left"
+                  className="flex w-full cursor-pointer select-none items-center gap-3 rounded-md px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   <span className="mt-0.5 size-2.5 shrink-0 rounded-full" style={{ background: RISK_HEX[s.riskLevel] }} />
                   <span className="min-w-0 flex-1">
@@ -350,11 +357,16 @@ export function CesiumExplorer() {
                     <span className="block font-mono text-xs text-foreground">{s.confidence}%</span>
                     <span className="block text-[10px] text-muted-foreground">conf.</span>
                   </span>
-                  <ChevronDown className={cn('size-4 shrink-0 text-muted-foreground transition-transform duration-200', open && 'rotate-180')} />
-                </div>
+                  <ChevronDown aria-hidden className={cn('size-4 shrink-0 text-muted-foreground transition-transform duration-200', open && 'rotate-180')} />
+                </button>
 
                 {open && (
-                  <div className="space-y-3 px-3 pb-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <div
+                    id={`site-${s.id}-details`}
+                    role="region"
+                    aria-labelledby={`site-${s.id}-toggle`}
+                    className="space-y-3 px-3 pb-3 animate-in fade-in slide-in-from-top-1 duration-200"
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="font-mono text-xs text-muted-foreground">{s.id} · {s.district}</p>
